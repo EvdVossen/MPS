@@ -1,0 +1,106 @@
+# Script to find the most engrafting SGBs with their names.
+rm(list=ls())
+
+library(tidyverse)
+library(ggplot2)
+source("~/Data_files/MPS/Eduard/Data_transfer/R-scripts/functions.R")
+library(ggrepel)
+library(patchwork)
+
+setwd(path_data)
+
+#import files (imports are done in the functions script)
+d <- get_data(triad = T, triad_long = T, mp4 = T, st=T, met=T, metab = T)
+base::list2env(d,envir=.GlobalEnv)
+
+mp4_post <- mp4 %>% filter(rownames(.) %in% triad$Post_FMT)
+
+mp4_stats <- apply(mp4,2,summary) %>% 
+  t() %>%  
+  as.data.frame()
+mp4_stats_post_FMT <- mp4_post %>% 
+  apply(.,2,summary) %>% 
+  t() %>% 
+  as.data.frame()
+
+### total strain engrafting rates (first without looking at substudies)
+stt <- st[grepl("MPS_H", st$X1) & grepl("MPP_M", st$X2),] %>% 
+  dplyr::filter(paste0(.$X1, .$X2) %in% paste0(triad$Donor_Sample_ID, triad$Post_FMT)) %>% 
+  dplyr::select(where(is.logical)) %>% 
+  colSums(., na.rm = T) %>% 
+  as.data.frame(.) %>% 
+  setNames("n_true") %>% 
+  filter(n_true>=5) %>% 
+  mutate(SGB_ID = rownames(.),
+         median_abundance_all = mp4_stats$Median[match(rownames(.), rownames(mp4_stats))],
+         mean_abundance_all =  mp4_stats$Mean[match(rownames(.), rownames(mp4_stats))],
+         median_abundance_post_FMT = mp4_stats_post_FMT$Median[match(rownames(.), rownames(mp4_stats_post_FMT))],
+         mean_abundance_post_FMT =  mp4_stats_post_FMT$Mean[match(rownames(.), rownames(mp4_stats_post_FMT))]) %>%
+  mutate(plot_name = mp4_db$plot_name[match(rownames(.), mp4_db$SGB_ID)]) %>% 
+  .[order(as.numeric(-.$n_true)),]
+
+top_n_feat = 30
+  
+mp4_post_top <- mp4_post[,stt$SGB_ID[1:top_n_feat]] %>%
+  gather(., "SGB_ID", "relative_abundance", 1:top_n_feat) %>%
+  mutate(Phylum=mp4_db$phylum[match(.$SGB_ID, mp4_db$SGB_ID)])
+
+top_feat_30 <- stt[stt$SGB_ID %in% mp4_post_top$SGB_ID,] %>%
+  arrange(factor(SGB_ID, levels = unique(mp4_post_top))) %>%
+  `rownames<-`(.$SGB_ID)
+  
+my_palette <- colorRampPalette(c("black", "darkgrey"))(n = top_n_feat)
+  
+p2 <-
+ggplot(top_feat_30, aes(x = reorder(plot_name, as.double((n_true/nrow(mp4_post))*100)), y = as.double((n_true/nrow(mp4_post))*100))) +
+  geom_segment(
+    aes(x = reorder(plot_name, as.double((n_true/nrow(mp4_post))*100)), xend = plot_name, y = 0.0, yend = as.double((n_true/nrow(mp4_post))*100)),
+    color = my_palette, size = 1) +
+  geom_point(shape = 21, colour = my_palette, fill = "white", size = 2, stroke = 2) +
+  theme_Publication()+
+  xlab(" ") + ylab("Strain transfer (%)") +
+  scale_y_continuous(limits = c(0,50)) +
+  coord_flip()
+
+
+mp4_post_top <- mp4_post_top %>% 
+  mutate(plot_name = top_feat_30$plot_name[match(.$SGB_ID, top_feat_30$SGB_ID)]) %>% 
+  mutate(plot_name = factor(plot_name, levels = c(levels(reorder(top_feat_30$plot_name, as.double((top_feat_30$n_true/nrow(mp4_post)) * 100))))))
+
+### post abundance only engrafters
+st1 <- st %>% dplyr::filter(paste0(X1,X2) %in% paste0(triad$Post_FMT, triad$Donor_Sample_ID)) %>%
+  dplyr::select(X1, X2, c(names(.)[names(.) %in% stt$SGB_ID[1:top_n_feat]])) %>% 
+  tibble::column_to_rownames("X1") %>% dplyr::select(-X2) %>% 
+  .[order(as.numeric(gsub("MPP_M","",rownames(.)))),]
+
+mp4_post_top30 <- mp4_post %>% dplyr::select(names(st1)) %>% 
+  .[order(as.numeric(gsub("MPP_M","",rownames(.)))),]
+mp4_post_top30[(is.na(st1) | st1 == FALSE)] <- NA
+
+mp4_post_top30_engrafters<- mp4_post_top30[,stt$SGB_ID[1:top_n_feat]] %>%
+  gather(., "SGB_ID", "relative_abundance", 1:top_n_feat) %>% 
+  mutate(Phylum=mp4_db$phylum[match(.$SGB_ID, mp4_db$SGB_ID)])%>% 
+  mutate(plot_name = top_feat_30$plot_name[match(.$SGB_ID, top_feat_30$SGB_ID)]) %>% 
+  mutate(plot_name = factor(plot_name, levels = c(levels(reorder(top_feat_30$plot_name, as.double((top_feat_30$n_true/nrow(mp4_post)) * 100)))))) %>% 
+  dplyr::filter(!is.na(relative_abundance))
+ 
+p3 <-
+ggplot(mp4_post_top30_engrafters, aes(y=relative_abundance, x=plot_name)) +
+  geom_boxplot(aes(fill=Phylum),outlier.shape = NA) +
+  geom_point(position = "jitter", size = 0.1, na.rm = T)+
+  theme_Publication() +
+  scale_y_continuous(limits = c(0, 20),breaks = seq(0, 20, by = 2)) +
+  xlab(" ") + ylab("Relative abundance (%)") +
+  theme(axis.title.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank()) +
+  labs(fill = "Phylum") +
+  coord_flip(ylim = c(0, 10))
+
+pf3 <- p2 + p3
+ggsave(filename = "Figure_3.pdf",plot = pf3, device = "pdf",
+       path = "Manuscript/Main_Figures", height = 10, width = 18)
+
+top_list_cca <- top_feat_30 %>% filter(median_abundance_post_FMT > 1 | mean_abundance_post_FMT > 1 | n_true >= 10) %>%
+  `rownames<-`(.$SGB_ID) %>% 
+  rio::export(., paste0(path_data, "/Intermediate_files/top_list_strain_engraftment.xlsx"), rowNames = T)
