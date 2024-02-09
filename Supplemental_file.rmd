@@ -1,0 +1,1320 @@
+---
+title: "Disentangle beneficial effects of strain engraftment after fecal microbiota transplantation in subjects with MetSyn"
+author: 
+- "Eduard W. J. van der Vossen,   Mark Davids,  Bas Voermans, "
+- "Annick V. Hartstra, Annefleur M. Koopen, Pieter de Groot, "
+- "Evgeni Levin,  Max Nieuwdorp"
+date: "Last compiled on: 17/01/2024"
+output:
+  html_document: default
+  pdf_document:
+    latex_engine: xelatex
+---
+
+```{r setup, include=FALSE} 
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Note that all scripts, including the markdown of this pdf are readily available at: 
+### https://github.com/EvdVossen/MPS/
+
+## Preparatory work:
+
+Loading necessary packages & functions created during the creation of the manuscript.
+
+```{r clean working environment, echo=TRUE}
+library(corrplot)
+library(dplyr)
+library(ggplot2)
+library(ggpubr)
+library(ggsignif)
+library(ggrepel)
+library(igraph)
+library(mixOmics)
+library(patchwork)
+library(stringr)
+library(tidyverse)
+library(viridis)
+source("~/Data_files/MPS/Eduard/Data_transfer/R-scripts/functions.R")
+```
+
+```{r Importing data, echo=TRUE}
+#set working directory
+setwd(path_data)
+
+#import files (imports are done in the functions script)
+d <- get_data(triad = T, met = T, st = T, mp4 = T, path_dat = T, metab = T)
+base::list2env(d,envir=.GlobalEnv);rm(d)
+```
+
+## Figure 1 preparatory work
+
+```{r fig_1_preparatory, echo=TRUE}
+fatmed <- triad[triad$Study_origin=="FATMED",]
+appetite <- triad[triad$Study_origin=="APPETITE",]
+febaligo <- triad[triad$Study_origin=="FEBALIGO",]
+
+## Create a dataframe with the conversion of sample name to plot letter 
+# A = donor A; A1 = subject 1 from donor A
+fatmed_met <- fatmed %>% 
+  dplyr::mutate(donor_name_plot=LETTERS[match(.$Donor_Sample_ID, 
+                                              unique(.$Donor_Sample_ID))]) %>% 
+  dplyr::group_by(donor_name_plot) %>%
+  dplyr::mutate(subject_name_plot = paste0(donor_name_plot, row_number())) %>% 
+  tidyr::gather("Sample_type", "Subject_ID", 3:5) %>% 
+  dplyr::mutate(plot_names = ifelse(Sample_type=="Donor_Sample_ID", 
+                                    donor_name_plot, 
+                                    subject_name_plot)) %>% 
+  dplyr::ungroup() %>% 
+  dplyr::select(-c(Pt_ID, Triad, Study_origin, 
+                   subject_name_plot, donor_name_plot)) %>% 
+  dplyr::distinct()
+
+appetite_met <- appetite %>% 
+  dplyr::mutate(donor_name_plot=LETTERS[match(.$Donor_Sample_ID, 
+                                              unique(.$Donor_Sample_ID))]) %>% 
+  dplyr::group_by(donor_name_plot) %>%
+  dplyr::mutate(subject_name_plot = paste0(donor_name_plot, row_number())) %>% 
+  tidyr::gather("Sample_type", "Subject_ID", 3:5) %>% 
+  dplyr::mutate(plot_names = ifelse(Sample_type=="Donor_Sample_ID", 
+                                    donor_name_plot, 
+                                    subject_name_plot)) %>% 
+  dplyr::ungroup() %>% 
+  dplyr::select(-c(Pt_ID, Triad, Study_origin, 
+                   subject_name_plot,donor_name_plot)) %>% 
+  dplyr::distinct()
+
+febaligo_met <- febaligo %>% 
+  dplyr::mutate(donor_name_plot=LETTERS[match(.$Donor_Sample_ID, 
+                                              unique(.$Donor_Sample_ID))]) %>% 
+  dplyr::group_by(donor_name_plot) %>%
+  dplyr::mutate(subject_name_plot = paste0(donor_name_plot, row_number())) %>% 
+  tidyr::gather("Sample_type", "Subject_ID", 3:5) %>%
+  dplyr::mutate(plot_names = ifelse(Sample_type=="Donor_Sample_ID", 
+                                    donor_name_plot, 
+                                    subject_name_plot)) %>% 
+  dplyr::ungroup() %>% 
+  dplyr::select(-c(Pt_ID, Triad, Study_origin, 
+                   subject_name_plot, donor_name_plot)) %>% 
+  dplyr::distinct()
+
+#profiled strains post_fmt
+strains_post <- st %>% 
+  dplyr::filter(grepl("MPP", .$X1)) %>% 
+  dplyr::select(-X2) %>% 
+  dplyr::mutate(across(everything(), 
+                       ~replace(., . %in% c("N.A.", "NA", "N/A", ""), NA)))
+
+#profiled strains pre_fmt
+strains_pre <- st %>% 
+  dplyr::filter(grepl("MPS_M", .$X1)) %>% 
+  dplyr::select(-X2) %>% 
+  dplyr::mutate(across(everything(), 
+                       ~replace(., . %in% c("N.A.", "NA", "N/A", ""), NA)))
+
+#profiled strains donor
+strains_donor <- st %>% 
+  dplyr::filter(grepl("MPS_H", .$X1)) %>% 
+  dplyr::select(-X2) %>% 
+  dplyr::mutate(across(everything(), 
+                       ~replace(., . %in% c("N.A.", "NA", "N/A", ""), NA)))
+
+#for-loop to identify the total SGBs that were used in strainphlan
+triad$total_strains_postfmt <- NA
+triad$total_strains_prefmt <- NA
+triad$total_strains_donor <- NA
+for (i in 1:nrow(triad)){
+  Post_FMT_ID = triad$Post_FMT[i]
+  Pre_FMT_ID = triad$Pre_FMT[i]
+  Donor_FMT_ID = triad$Donor_Sample_ID[i]
+  n_sgb_post <- strains_post %>% 
+    dplyr::filter(X1 %in% Post_FMT_ID) %>%
+    dplyr::select_if(~sum(!is.na(.)) > 0) %>% 
+    dplyr::select(-1) %>% 
+    ncol(.)
+  n_sgb_pre <- strains_pre %>% 
+    dplyr::filter(X1 %in% Pre_FMT_ID) %>%
+    dplyr::select_if(~sum(!is.na(.)) > 0) %>% 
+    dplyr::select(-1) %>% 
+    ncol(.)
+  n_sgb_donor <- strains_donor %>% 
+    dplyr::filter(X1 %in% Donor_FMT_ID) %>%
+    dplyr::select_if(~sum(!is.na(.)) > 0) %>% 
+    dplyr::select(-1) %>% 
+    ncol(.)
+  triad[triad$Post_FMT==Post_FMT_ID,]$total_strains_postfmt <- n_sgb_post
+  triad[triad$Pre_FMT==Pre_FMT_ID,]$total_strains_prefmt <- n_sgb_pre
+  triad[i,]$total_strains_donor <- n_sgb_donor
+}
+
+# definition strain-sharing rate (Here called shared_strain_percentage) 
+# -> total number of shared strains between two samples divided by the number of 
+# species profiled by strainphlan in common between the two samples.
+st_feb <- st %>%
+  dplyr::filter(X1 %in% febaligo_met$Subject_ID & 
+                  X2 %in% febaligo_met$Subject_ID) %>%
+  dplyr::select(1,2, where(is.logical)) %>% 
+  dplyr::rowwise() %>% 
+  dplyr::mutate(true_counts = sum(c_across(3:ncol(.)),na.rm = T),
+         false_counts = sum(!c_across(3:ncol(.)),na.rm = T)) %>% 
+  dplyr::ungroup() %>% 
+  dplyr::mutate(shared_strain_percentage = 
+                  round((true_counts / (true_counts+false_counts))*100),0) %>% 
+  dplyr::select(X1,X2, shared_strain_percentage) %>% 
+  tidyr::pivot_wider(., names_from = X1, 
+                     values_from = shared_strain_percentage) %>% 
+  column_to_rownames("X2") %>% 
+  dplyr::select(unique(febaligo_met$Subject_ID)) %>% 
+  t(.) %>% 
+  as.data.frame(.) %>% 
+  dplyr::select(unique(febaligo_met$Subject_ID)) 
+
+st_fat <- st %>%
+  dplyr::filter(X1 %in% fatmed_met$Subject_ID & X2 %in% fatmed_met$Subject_ID) %>%
+  dplyr::select(1,2, where(is.logical)) %>% 
+  dplyr::rowwise() %>% 
+  dplyr::mutate(true_counts = sum(c_across(3:ncol(.)),na.rm = T),
+         false_counts = sum(!c_across(3:ncol(.)),na.rm = T)) %>% 
+  dplyr::ungroup() %>% 
+  dplyr::mutate(shared_strain_percentage = 
+                  round((true_counts / (true_counts+false_counts))*100),0) %>% 
+  dplyr::select(X1,X2, shared_strain_percentage) %>% 
+  tidyr::pivot_wider(., names_from = X1, 
+                     values_from = shared_strain_percentage) %>% 
+  column_to_rownames("X2") %>% 
+  dplyr::select(unique(fatmed_met$Subject_ID)) %>% 
+  t(.) %>% 
+  as.data.frame(.) %>% 
+  dplyr::select(unique(fatmed_met$Subject_ID))
+
+st_app <-   st %>%
+  dplyr::filter(X1 %in% appetite_met$Subject_ID & 
+                  X2 %in% appetite_met$Subject_ID) %>%
+  dplyr::select(1,2, where(is.logical)) %>% 
+  dplyr::rowwise() %>% 
+  dplyr::mutate(true_counts = sum(c_across(3:ncol(.)),na.rm = T),
+         false_counts = sum(!c_across(3:ncol(.)),na.rm = T)) %>% 
+  dplyr::ungroup() %>% 
+  dplyr::mutate(shared_strain_percentage = 
+                  round((true_counts / (true_counts+false_counts))*100),0) %>% 
+  dplyr::select(X1,X2, shared_strain_percentage) %>% 
+  tidyr::pivot_wider(., names_from = X1, 
+                     values_from = shared_strain_percentage) %>% 
+  column_to_rownames("X2") %>% 
+  dplyr::select(unique(appetite_met$Subject_ID)) %>% 
+  t(.) %>% 
+  as.data.frame(.) %>% 
+  dplyr::select(unique(appetite_met$Subject_ID))
+
+###Febaligo study figure
+g_feb <- graph.adjacency(as.matrix(st_feb),
+                     mode="undirected",
+                     weighted=T,
+                     diag = F)
+g_feb <- igraph::simplify(g_feb, remove.multiple=TRUE, remove.loops=TRUE)
+E(g_feb)$color <- paste0("gray",100-E(g_feb)$weight)
+E(g_feb)$weight <- abs(E(g_feb)$weight)
+
+# Remove any vertices remaining that have no edges
+g_feb <- delete.vertices(g_feb, degree(g_feb)==0)
+
+# Change shape of graph vertices
+V(g_feb)$shape <- "sphere"
+
+# Change colour of graph vertices
+V(g_feb)$color <- ifelse(grepl("MPS_M", V(g_feb)$name), "darkorange", 
+                         ifelse(grepl("MPP", V(g_feb)$name), 
+                                "#00b200", 
+                                "#B1D4E0"))
+
+# Change colour of vertex frames
+V(g_feb)$vertex.frame.color <- "white"
+
+# Assign names to the graph vertices (optional)
+V(g_feb)$name <- febaligo_met$plot_names[match(V(g_feb)$name, 
+                                               febaligo_met$Subject_ID)]
+
+# Put the sharing lines on top (set lines to NA that have a sharing rate below 15)
+g1_feb <- g_feb
+E(g1_feb)[E(g1_feb)$weight <=15]$color <- NA
+
+#### FATMED study figure
+g_fat <- graph.adjacency(as.matrix(st_fat),
+                     mode="undirected",
+                     weighted=T,
+                     diag = F)
+g_fat <- igraph::simplify(g_fat, remove.multiple=TRUE, remove.loops=TRUE)
+E(g_fat)$color <- paste0("gray",100-E(g_fat)$weight)
+E(g_fat)$weight <- abs(E(g_fat)$weight)
+
+# Remove any vertices remaining that have no edges
+g_fat <- delete.vertices(g_fat, degree(g_fat)==0)
+
+# Change shape of graph vertices
+V(g_fat)$shape <- "sphere"
+
+# Change colour of graph vertices
+V(g_fat)$color <- ifelse(grepl("MPS_M", V(g_fat)$name), "darkorange", 
+                         ifelse(grepl("MPP", V(g_fat)$name), 
+                                "#00b200", 
+                                "#B1D4E0"))
+
+# Change colour of vertex frames
+V(g_fat)$vertex.frame.color <- "white"
+
+# Assign names to the graph vertices (optional)
+V(g_fat)$name <- fatmed_met$plot_names[match(V(g_fat)$name, fatmed_met$Subject_ID)]
+
+# Put the sharing lines on top (set lines to NA that have a sharing rate below 15)
+g1_fat <- g_fat
+E(g1_fat)[E(g1_fat)$weight <=15]$color <- NA
+
+#### APPETITE study figure
+g_app <- graph.adjacency(as.matrix(st_app),
+                     mode="undirected",
+                     weighted=T,
+                     diag = F)
+g_app <- igraph::simplify(g_app, remove.multiple=TRUE, remove.loops=TRUE)
+E(g_app)$color <- paste0("gray",100-E(g_app)$weight)
+E(g_app)$weight <- abs(E(g_app)$weight)
+
+# Remove any vertices remaining that have no edges
+g_app <- delete.vertices(g_app, degree(g_app)==0)
+
+# Change shape of graph vertices
+V(g_app)$shape <- "sphere"
+
+# Change colour of graph vertices
+V(g_app)$color <- ifelse(grepl("MPS_M", V(g_app)$name), "darkorange", 
+                         ifelse(grepl("MPP", V(g_app)$name), 
+                                "#00b200", 
+                                "#B1D4E0"))
+
+# Change colour of vertex frames
+V(g_app)$vertex.frame.color <- "white"
+
+# Assign names to the graph vertices (optional)
+V(g_app)$name <- appetite_met$plot_names[match(V(g_app)$name, 
+                                               appetite_met$Subject_ID)]
+
+#Group for legend
+legend_stuff <- data.frame(
+  group = factor(c("Pre FMT", "Post FMT", "Donor")),
+  color = factor(unique(V(g_app)$color), levels = c("#00b200",
+                                                    "darkorange",
+                                                    "#B1D4E0")))
+
+# Put the sharing lines on top (set lines to NA that have a sharing rate <= 15)
+g1_app <- g_app
+E(g1_app)[E(g1_app)$weight <=15]$color <- NA
+
+```
+
+## Figure 1: Appetite
+```{r Fig_1_A, fig.width=12, fig.height=8, out.width='80%', out.height='80%', echo = T}
+set.seed(1)
+plot(g_app,
+     main = "Appetite study",
+     vertex.label.color = "black",
+     vertex.label.dist = 1.2,
+     vertex.label.cex = 1,
+     vertex.size = 7,
+     layout = layout.fruchterman.reingold,
+     edge.width = 3)
+set.seed(1)
+plot(g1_app,
+     vertex.label.color = "black",
+     vertex.label.dist = 1.2,
+     vertex.size = 7,
+     vertex.label.cex = 1,
+     layout = layout.fruchterman.reingold,
+     add = TRUE,
+     edge.width = 3)
+legend(x=1.1, y=1.1,bty = "n",
+       legend=c("Pre FMT", "Post FMT", "Donor"),
+       fill=c("darkorange", "#00b200", "#B1D4E0"),
+       border=T,
+       title="Sample type")
+legend(NULL, x=1.1,y=.7 ,lty=1, col=c("gray95","gray50","gray1"),
+       lwd=2, 
+       bty = "n",
+       legend=c("0 %", "50 %", "100 %"),
+       border=NA,
+       title="Shared strains")
+```
+
+## Figure 1: Fatmed
+```{r Fig_1_B, fig.width=12, fig.height=8, out.width='80%', out.height='80%', echo = T}
+set.seed(1)
+plot(g_fat,
+     main = "Fatmed study",
+     vertex.label.color = "black",
+     vertex.label.dist = 1.2,
+     vertex.size = 7,
+     vertex.label.cex = 1,
+     layout = layout.fruchterman.reingold,
+     edge.width = 3)
+set.seed(1)
+plot(g1_fat,
+     vertex.label.color = "black",
+     vertex.label.dist = 1.2,
+     vertex.size = 7,
+     vertex.label.cex = 1,
+     layout = layout.fruchterman.reingold,
+     add = TRUE,
+     edge.width = 3)
+legend(x=1.0, y=1.1,bty = "n",
+       legend=c("Pre FMT", "Post FMT", "Donor"),
+       fill=c("darkorange", "#00b200", "#B1D4E0"),
+       border=T,
+       title="Sample type")
+legend(NULL, x=1.0,y=.7 ,lty=1, col=c("gray95","gray50","gray1"),
+       lwd=2, 
+       bty = "n",
+       legend=c("0 %", "50 %", "100 %"),
+       border=NA,
+       title="Shared strains")
+```
+
+## Figure 1: Febaligo
+```{r Fig_1_C, fig.width=12, fig.height=8, out.width='80%', out.height='80%', echo = T}
+set.seed(1)
+plot(g_feb,
+     main = "Febaligo study",
+     vertex.label.color = "black",
+     vertex.label.dist = 1.2,
+     vertex.size = 7,
+     vertex.label.cex = 1,
+     layout = layout.fruchterman.reingold,
+     edge.width = 3)
+set.seed(1)
+plot(g1_feb,
+     vertex.label.color = "black",
+     vertex.label.dist = 1.2,
+     vertex.size = 7,
+     vertex.label.cex = 1,
+     layout = layout.fruchterman.reingold,
+     add = TRUE,
+     edge.width = 3)
+legend(x=1.0, y=1.1,bty = "n",
+       legend=c("Pre FMT", "Post FMT", "Donor"),
+       fill=c("darkorange", "#00b200", "#B1D4E0"),
+       border=T,
+       title="Sample type")
+legend(NULL, x=1.0,y=.7 ,lty=1, col=c("gray95","gray50","gray1"),
+       lwd=2, 
+       bty = "n",
+       legend=c("0 %", "50 %", "100 %"),
+       border=NA,
+       title="Shared strains")
+```
+
+\newpage
+
+## Figure 2 preparatory work
+### Formal definition (as stated in Ianiro et al., 2022 Nature Medicine; DOI: 10.1038/s41591-022-01964-3):
+### The fraction of retained strains is defined as: the fraction of post-FMT strains shared with pre-FMT 
+### (shared strains between post-FMT and pre-FMT divided by the number of strains profiled at post-FMT)
+### The fraction of donor strains as the fraction of post-FMT strains shared with
+### the donor (shared strains between post-FMT and donor divided by the number of strains profiled at post-FMT).
+
+```{r Fig_2_preparatory, echo = T}
+triad_ff <- triad %>% 
+  dplyr::select(-c(total_strains_prefmt, total_strains_donor)) %>% 
+  dplyr::select(3,4, everything()) %>% 
+  tidyr::gather("don_or_pre_type", value="don_or_pre_sample", 1:2)
+
+st_fractionfig <- st %>%
+  dplyr::mutate(X_comb = paste0 (X1, X2)) %>% 
+  dplyr::filter(X_comb %in% paste0(triad_ff$don_or_pre_sample, 
+                                   triad_ff$Post_FMT)) %>% 
+  dplyr::select(1,2, where(is.logical)) %>%
+  dplyr::select_if(~sum(!is.na(.)) > 0) %>% 
+  dplyr::rowwise() %>% 
+  dplyr::mutate(true_counts = sum(c_across(3:ncol(.)),na.rm = T),
+                false_counts = sum(!c_across(3:ncol(.)),na.rm = T)) %>% 
+  dplyr::ungroup() %>% 
+  dplyr::select(X1,X2, true_counts) %>%
+  dplyr::mutate(don_or_pre_type = ifelse(grepl("MPS_M",X1), 
+                                         "Pre_FMT_sharing_rate", 
+                                         "Donor_sharing_rate"))
+
+df_fractionfig <- triad %>% 
+  dplyr::select(Study_origin, Donor_Sample_ID, Pre_FMT, 
+                Post_FMT, total_strains_postfmt) %>% 
+  dplyr::mutate(donor_comb = paste0(Donor_Sample_ID, Post_FMT),
+                pre_comb = paste0(Pre_FMT, Post_FMT)) %>% 
+  dplyr::mutate(
+    Pre_FMT_sharing_counts = st_fractionfig$true_counts[
+      match(.$pre_comb, paste0(st_fractionfig$X1, st_fractionfig$X2))],
+    Donor_sharing_counts = st_fractionfig$true_counts[
+      match(.$donor_comb, paste0(st_fractionfig$X1, st_fractionfig$X2))]) %>% 
+  dplyr::mutate(
+    Pre_FMT_sharing_rate = Pre_FMT_sharing_counts / total_strains_postfmt,
+    Donor_sharing_rate = Donor_sharing_counts / total_strains_postfmt) %>% 
+  dplyr::select(-c(donor_comb, pre_comb))
+
+# Assuming df_centroids is your centroid data frame
+df_centroids <- df_fractionfig %>%
+  dplyr::group_by(Study_origin) %>%
+  dplyr::summarize(
+    centroid_x = mean(Pre_FMT_sharing_rate),
+    centroid_y = mean(Donor_sharing_rate))
+```
+
+## Figure 2
+
+```{r Fig_2, fig.width=8, fig.height=8, out.width='80%', out.height='80%', echo = T}
+p2 <- ggplot(data = df_fractionfig, 
+             aes(x = Pre_FMT_sharing_rate, y = Donor_sharing_rate)) +
+  geom_point(aes(color = Study_origin), size = 2) +
+  geom_point(data = df_centroids, 
+             aes(x = centroid_x, 
+                 y = centroid_y, 
+                 color = Study_origin), 
+             size = 4, 
+             shape = 17, 
+             show.legend = F) +
+  theme_Publication() +
+  scale_x_continuous(limits = c(0, 0.75), 
+                     breaks = c(0.0, 0.25, 0.5, 0.75), 
+                     labels = c(0, 0.25, 0.5, 0.75)) +
+  scale_y_continuous(limits = c(0, 0.75), 
+                     breaks = c(0.0, 0.25, 0.5, 0.75), 
+                     labels = c(0, 0.25, 0.5, 0.75)) +
+  geom_abline(intercept = 0, 
+              slope = 1, 
+              linetype = "dashed") +
+  labs(color = 'Study') +
+  xlab("Fraction of post-FMT strains shared with pre-FMT") +
+  ylab("Fraction of Post-FMT strains shared with donor") +
+  scale_color_manual(
+    name = "Study",
+    labels = c("Appetite", "Fatmed", "Febaligo"),
+    values = c("#F8766D", "#00BA38", "#619CFF")) +
+  guides(size = "none")
+print(p2)
+```
+
+\newpage
+
+# Assessing strain dissimilarity within each dataset
+## Based on a linear model
+### Preparatory work
+```{r Strain_dissimilarity_lm_prep, echo = T}
+# strain-sharing-based dissimilarity = 1-(n/M);
+# n = number of shared strains
+# M = maximum number of shared strains
+st_dissimilarity <- st %>%
+  dplyr::mutate(X_comb = paste0(X1, X2)) %>%
+  dplyr::select(1,2, where(is.logical)) %>%
+  dplyr::rowwise() %>%
+  dplyr::mutate(true_counts = sum(c_across(3:ncol(.)),na.rm = T),
+                false_counts = sum(!c_across(3:ncol(.)),na.rm = T)) %>%
+  dplyr::ungroup() %>%
+  dplyr::select(X1,X2, true_counts, false_counts) %>%
+  dplyr::mutate(max_shared_strains = true_counts + false_counts) %>%
+  dplyr::mutate(Dissimilarity = 1 - (true_counts / max_shared_strains)) %>%
+  dplyr::select(X1, X2, Dissimilarity)
+
+st_dis_feb <- st_dissimilarity %>%
+  dplyr::filter(X1 %in% febaligo_met$Subject_ID & 
+                  X2 %in% febaligo_met$Subject_ID) %>%
+  tidyr::pivot_wider(., names_from = X1, values_from = Dissimilarity) %>%
+  column_to_rownames("X2") %>%
+  dplyr::mutate_all(~ replace_na(., 0)) %>%
+  dplyr::select(unique(febaligo_met$Subject_ID)) %>%
+  t(.) %>%
+  as.data.frame(.) %>%
+  dplyr::select(unique(febaligo_met$Subject_ID))
+
+st_dis_fat <- st_dissimilarity %>%
+  dplyr::filter(X1 %in% fatmed_met$Subject_ID & 
+                  X2 %in% fatmed_met$Subject_ID) %>%
+  tidyr::pivot_wider(., names_from = X1, values_from = Dissimilarity) %>%
+  column_to_rownames("X2") %>%
+  dplyr::mutate_all(~ replace_na(., 0)) %>%
+  dplyr::select(unique(fatmed_met$Subject_ID)) %>%
+  t(.) %>%
+  as.data.frame(.) %>%
+  dplyr::select(unique(fatmed_met$Subject_ID))
+
+st_dis_appetite <- st_dissimilarity %>%
+  dplyr::filter(X1 %in% appetite_met$Subject_ID & 
+                  X2 %in% appetite_met$Subject_ID) %>%
+  tidyr::pivot_wider(., names_from = X1, values_from = Dissimilarity) %>%
+  column_to_rownames("X2") %>%
+  dplyr::mutate_all(~ replace_na(., 0)) %>%
+  dplyr::select(unique(appetite_met$Subject_ID)) %>%
+  t(.) %>%
+  as.data.frame(.) %>%
+  dplyr::select(unique(appetite_met$Subject_ID))
+```
+
+\newpage
+
+## Linear models output per sub-study
+### Appetite
+```{r Strain_dissimilarity_lm_app, echo =T}
+## APPETITE estimates & p-values
+appetite_met <- appetite_met %>%
+  dplyr::mutate(
+    donor_relation = gsub("[0-9]+","", appetite_met$plot_names),
+    triad = ifelse(grepl("MPS_H", appetite_met$Subject_ID), "",
+                   ifelse(grepl("MPS_M", appetite_met$Subject_ID),
+                          triad$Triad[match(appetite_met$Subject_ID, 
+                                            triad$Pre_FMT)],
+                          triad$Triad[match(appetite_met$Subject_ID, 
+                                            triad$Post_FMT)])))
+
+## LM
+appetite_pp <- appetite %>% 
+  tidyr::gather("Time", "Subject", 4:5)
+donors <- colnames(as.matrix(st_dis_appetite)) %in% appetite_met$Subject_ID[1:2]
+subjects <- !colnames(as.matrix(st_dis_appetite)) %in% appetite_met$Subject_ID[1:2]
+df.long <- st_dis_appetite %>%
+  dplyr::mutate(rownames = rownames(.))
+df.long <- reshape2::melt(df.long[subjects, donors]) %>%
+  stats::setNames(c("Subject","Donor", "Dissimilarity")) %>%
+  dplyr::mutate(
+    TF_donor = ifelse(paste0(.$Subject, .$Donor) %in% 
+                        paste0(appetite_pp$Subject, 
+                               appetite_pp$Donor_Sample_ID), T, F),
+    Sample_type = ifelse(grepl("MPS_M", .$Subject), "Pre-FMT", "Post-FMT")) %>%
+  dplyr::mutate(subject_rep = gsub("MPS_","",gsub("MPP_","", Subject)))
+summary(lm(Dissimilarity ~ TF_donor+Sample_type, data=df.long))
+```
+
+\newpage
+
+### Fatmed
+```{r Strain_dissimilarity_lm_fat, echo =T}
+## FATMED estimates & p-values
+fatmed_met <- fatmed_met %>%
+  dplyr::mutate(
+    donor_relation = gsub("[0-9]+","", fatmed_met$plot_names),
+    triad = 
+      ifelse(grepl("MPS_H", fatmed_met$Subject_ID), "",
+             ifelse(grepl("MPS_M", fatmed_met$Subject_ID),
+                    triad$Triad[match(fatmed_met$Subject_ID, triad$Pre_FMT)],
+                    triad$Triad[match(fatmed_met$Subject_ID, triad$Post_FMT)])))
+
+## LM
+fatmed_pp <- fatmed %>% tidyr::gather("Time", "Subject", 4:5)
+donors <- colnames(as.matrix(st_dis_fat)) %in% fatmed_met$Subject_ID[1:2]
+subjects <- !colnames(as.matrix(st_dis_fat)) %in% fatmed_met$Subject_ID[1:2]
+df.long <- st_dis_fat %>%
+  dplyr::mutate(rownames = rownames(.))
+df.long <- reshape2::melt(df.long[subjects, donors]) %>%
+  stats::setNames(c("Subject","Donor", "Dissimilarity")) %>%
+  dplyr::mutate(TF_donor = 
+                  ifelse(paste0(.$Subject, .$Donor) %in% 
+                           paste0(fatmed_pp$Subject, fatmed_pp$Donor_Sample_ID), 
+                         T, F),
+         Sample_type = ifelse(grepl("MPS_M", .$Subject), 
+                              "Pre-FMT", 
+                              "Post-FMT")) %>%
+  dplyr::mutate(subject_rep = gsub("MPS_","",gsub("MPP_","", Subject)))
+summary(lm(Dissimilarity ~ TF_donor+Sample_type, data=df.long))
+
+```
+
+\newpage
+
+### Febaligo
+
+```{r Strain_dissimilarity_lm_feb, echo =T}
+febaligo_met <- febaligo_met %>%
+  dplyr::mutate(
+    donor_relation = gsub("[0-9]+","", febaligo_met$plot_names),
+    triad = ifelse(grepl("MPS_H", febaligo_met$Subject_ID), "",
+                   ifelse(grepl("MPS_M", febaligo_met$Subject_ID),
+                          triad$Triad[match(febaligo_met$Subject_ID, 
+                                            triad$Pre_FMT)],
+                          triad$Triad[match(febaligo_met$Subject_ID, 
+                                            triad$Post_FMT)])))
+
+## LM
+febaligo_pp <- febaligo %>% tidyr::gather("Time", "Subject", 4:5)
+donors <- colnames(as.matrix(st_dis_feb)) %in% febaligo_met$Subject_ID[1:2]
+subjects <- !colnames(as.matrix(st_dis_feb)) %in% febaligo_met$Subject_ID[1:2]
+df.long <- st_dis_feb %>%
+  dplyr::mutate(rownames = rownames(.))
+df.long <- reshape2::melt(df.long[subjects, donors]) %>%
+  stats::setNames(c("Subject","Donor", "Dissimilarity")) %>%
+  dplyr::mutate(TF_donor = ifelse(paste0(.$Subject, .$Donor) %in% 
+                                    paste0(febaligo_pp$Subject, 
+                                           febaligo_pp$Donor_Sample_ID), T, F),
+         Sample_type = ifelse(grepl("MPS_M", .$Subject), "Pre-FMT", "Post-FMT")) %>%
+  dplyr::mutate(subject_rep = gsub("MPS_","",gsub("MPP_","", Subject)))
+summary(lm(Dissimilarity ~ TF_donor+Sample_type, data=df.long))
+```
+
+\newpage
+
+# Supplementary Table 2: fraction of strains shared with the donor in correlation to clinical parameters
+
+```{r Supplementary_table_2, echo = T}
+met_delta <- (met_post %>% 
+                dplyr::select(-Study_origin) - met_pre %>% 
+                dplyr::select(-Study_origin)) %>%
+  .[order(as.numeric(gsub("M","", rownames(.)))),] %>%
+  dplyr::mutate(Donor_sharing_rate = 
+                  df_fractionfig$Donor_sharing_rate[match(
+                    rownames(.), gsub("MPP_","", df_fractionfig$Post_FMT))])
+
+#create empty df
+df <- data.frame(
+  `Clinical parameter` = character(),
+  Estimate = numeric(),
+  p_value = numeric())
+
+# loop in which the donor sharing rate is correlated to the clinical parameters
+for (i in 1:(ncol(met_delta)-1)){
+  name_clinparam <- names(met_delta)[i]
+  df1 <- met_delta %>% dplyr::select(all_of(name_clinparam), Donor_sharing_rate) %>%
+    stats::setNames(c("clinparam", "Donor_sharing_rate"))
+  cor_res <- cor.test(df1$clinparam, df1$Donor_sharing_rate, method = "spearman")
+  df[i,] <- c(name_clinparam, round(cor_res$estimate,2), round(cor_res$p.value,3))
+}
+
+df <- df[order(as.numeric(df$p_value)),]
+print(df)
+```
+
+\newpage
+
+# Figure 3 Preparatory work
+
+```{r, Figure_3_prep, echo = T}
+mp4_post <- mp4 %>% dplyr::filter(rownames(.) %in% triad$Post_FMT)
+
+mp4_stats <- apply(mp4,2,summary) %>% 
+  t() %>%  
+  as.data.frame()
+mp4_stats_post_FMT <- mp4_post %>% 
+  apply(.,2,summary) %>% 
+  t() %>% 
+  as.data.frame()
+
+# total strain engrafting rates
+stt <- st[grepl("MPS_H", st$X1) & grepl("MPP_M", st$X2),] %>% 
+  dplyr::filter(paste0(.$X1, .$X2) %in% paste0(triad$Donor_Sample_ID, 
+                                               triad$Post_FMT)) %>% 
+  dplyr::select(where(is.logical)) %>% 
+  colSums(., na.rm = T) %>% 
+  as.data.frame(.) %>% 
+  stats::setNames("n_true") %>% 
+  dplyr::filter(n_true>=5) %>% 
+  dplyr::mutate(
+    SGB_ID = rownames(.), 
+    median_abundance_all = mp4_stats$Median[match(rownames(.), 
+                                                  rownames(mp4_stats))],
+    mean_abundance_all =  mp4_stats$Mean[match(rownames(.), 
+                                               rownames(mp4_stats))],
+    median_abundance_post_FMT = mp4_stats_post_FMT$Median[
+      match(rownames(.), rownames(mp4_stats_post_FMT))],
+    mean_abundance_post_FMT =  mp4_stats_post_FMT$Mean[
+      match(rownames(.), rownames(mp4_stats_post_FMT))]) %>%
+  dplyr::mutate(plot_name = mp4_db$plot_name[match(rownames(.), mp4_db$SGB_ID)]) %>% 
+  .[order(as.numeric(-.$n_true)),]
+
+# Taking the top 30 engrafters into account
+top_n_feat = 30
+my_palette <- colorRampPalette(c("black", "darkgrey"))(n = top_n_feat)
+
+mp4_post_top <- mp4_post[,stt$SGB_ID[1:top_n_feat]] %>%
+  gather(., "SGB_ID", "relative_abundance", 1:top_n_feat) %>%
+  dplyr::mutate(Phylum=mp4_db$phylum[match(.$SGB_ID, mp4_db$SGB_ID)])
+
+top_feat_30 <- stt[stt$SGB_ID %in% mp4_post_top$SGB_ID,] %>%
+  arrange(factor(SGB_ID, levels = unique(mp4_post_top))) %>%
+  `rownames<-`(.$SGB_ID)
+  
+# Post-FMT relative abundance for the subjects whom have had engraftment
+st1 <- st %>% 
+  dplyr::filter(paste0(X1,X2) %in% paste0(triad$Post_FMT, 
+                                          triad$Donor_Sample_ID)) %>%
+  dplyr::select(X1, X2, c(names(.)[names(.) %in% stt$SGB_ID[1:top_n_feat]])) %>% 
+  tibble::column_to_rownames("X1") %>% dplyr::select(-X2) %>% 
+  .[order(as.numeric(gsub("MPP_M","",rownames(.)))),]
+
+mp4_post_top30 <- mp4_post %>% dplyr::select(names(st1)) %>% 
+  .[order(as.numeric(gsub("MPP_M","",rownames(.)))),]
+mp4_post_top30[(is.na(st1) | st1 == FALSE)] <- NA
+
+mp4_post_top30_engrafters<- mp4_post_top30[,stt$SGB_ID[1:top_n_feat]] %>%
+  gather(., "SGB_ID", "relative_abundance", 1:top_n_feat) %>% 
+  dplyr::mutate(Phylum=mp4_db$phylum[match(.$SGB_ID, mp4_db$SGB_ID)]) %>% 
+  dplyr::mutate(plot_name = top_feat_30$plot_name[match(.$SGB_ID, top_feat_30$SGB_ID)]) %>% 
+  dplyr::mutate(
+    plot_name = factor(plot_name, levels = c(
+      levels(reorder(top_feat_30$plot_name, 
+                     as.double((top_feat_30$n_true/nrow(mp4_post)) * 100)))))) %>% 
+  dplyr::filter(!is.na(relative_abundance))
+```
+
+# Figure 3
+
+```{r Fig_3, fig.width=14, fig.height=10, out.width='100%', out.height='100%', echo = T}
+
+p1 <-
+ggplot(top_feat_30, 
+       aes(x = reorder(plot_name, as.double((n_true/nrow(mp4_post))*100)), 
+           y = as.double((n_true/nrow(mp4_post))*100))) +
+  geom_segment(
+    aes(x = reorder(plot_name, as.double((n_true/nrow(mp4_post))*100)), 
+        xend = plot_name, 
+        y = 0.0, 
+        yend = as.double((n_true/nrow(mp4_post))*100)),
+    color = my_palette, size = 1) +
+  geom_point(shape = 21, 
+             colour = my_palette, 
+             fill = "white", 
+             size = 2, 
+             stroke = 2) +
+  theme_Publication()+
+  xlab(" ") + 
+  ylab("Strain transfer (%)") +
+  scale_y_continuous(limits = c(0,50)) +
+  coord_flip()
+
+mp4_post_top <- mp4_post_top %>% 
+  dplyr::mutate(plot_name = 
+           top_feat_30$plot_name[match(.$SGB_ID, top_feat_30$SGB_ID)]) %>% 
+  dplyr::mutate(plot_name = 
+           factor(plot_name, 
+                  levels = 
+                    c(levels(reorder(top_feat_30$plot_name,
+                                     as.double((
+                                       top_feat_30$n_true/nrow(mp4_post)) * 100))))))
+p2 <-
+ggplot(mp4_post_top30_engrafters, 
+       aes(y=relative_abundance, 
+           x=plot_name)) +
+  geom_boxplot(aes(fill=Phylum),
+               outlier.shape = NA) +
+  geom_point(position = "jitter", 
+             size = 0.1, 
+             na.rm = T)+
+  theme_Publication() +
+  scale_y_continuous(limits = c(0, 20),breaks = seq(0, 20, by = 2)) +
+  xlab(" ") + 
+  ylab("Relative abundance (%)") +
+  theme(axis.title.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank()) +
+  labs(fill = "Phylum") +
+  coord_flip(ylim = c(0, 10))
+
+pf3 <- p1 + p2
+print(pf3)
+```
+
+\newpage
+
+```{r top_engrafters_df, echo = TRUE}
+top_list_engraftment <- top_feat_30 %>% 
+  dplyr::filter(median_abundance_post_FMT > 1 | 
+           mean_abundance_post_FMT > 1 | 
+           n_true >= 10) %>%
+  `rownames<-`(.$SGB_ID) 
+
+top_list_engraftment %>% 
+  dplyr::select(plot_name, n_true, mean_abundance_post_FMT) %>% 
+  print(.)
+```
+
+\newpage
+
+# Supplementary figure 1 preparatory work
+
+```{r Fig_S1_prep, echo = TRUE}
+st2 <- st %>% 
+  dplyr::filter(paste0(X1,X2) %in% paste0(triad$Post_FMT, triad$Donor_Sample_ID)) %>%
+  dplyr::select(X1, X2, all_of(rownames(top_list_engraftment))) %>%
+  dplyr::mutate_at(vars(-X1, -X2), ~ifelse(is.na(.) | . == "" | !., 0, 1)) %>%
+  dplyr::mutate(X1 = gsub("MPP_","", X1)) %>%
+  dplyr::select(-X2) %>%
+  tibble::column_to_rownames("X1") %>%
+  .[order(as.numeric(gsub("M","", rownames(.)))),] %>%
+  stats::setNames(top_list_engraftment$plot_name[match(names(.), 
+                                                       rownames(top_list_engraftment))])
+
+mp4 <- mp4 %>%  
+  dplyr::mutate(Subject_ID = gsub(".*_","", rownames(.)),
+         Time = ifelse(grepl("MPP_", rownames(.)), "Post FMT", "Pre FMT")) %>% 
+  dplyr::mutate(Time = factor(Time, levels = c("Pre FMT", "Post FMT"))) 
+
+mp4_delta <- (mp4_post %>% 
+                dplyr::select(all_of(top_list_engraftment$SGB_ID)) - mp4_pre %>% 
+                dplyr::select(all_of(top_list_engraftment$SGB_ID))) %>% 
+  `rownames<-`(gsub("MPP_","", rownames(.))) %>% 
+  merge(., st2, by = "row.names") %>% 
+  tibble::column_to_rownames("Row.names")
+
+p <- list()
+for (idx in 1:nrow(top_list_engraftment)){
+  name_sgb <- top_list_engraftment$SGB_ID[idx]
+  name_engraftment_sgb <- top_list_engraftment$plot_name[idx]
+  parts_name <- str_split(name_engraftment_sgb, "\\(")[[1]]
+  part_name <- ifelse(grepl("clade", parts_name[1]), "P. copri", parts_name[1])
+  part_sgb <- ifelse(grepl("clade", parts_name[1]), 
+                     paste0(gsub("P. copri ","", parts_name[[1]]), 
+                            "(",parts_name[2]), paste0("(",parts_name[2]))
+  
+  
+  comb_for_lmer <- mp4 %>% 
+    dplyr::filter(!grepl("H", rownames(.))) %>% 
+    dplyr::select(all_of(name_sgb), Time, Subject_ID) %>%
+    stats::setNames(c("name_sgb", "Time", "Subject_ID")) %>% 
+    dplyr::mutate(engraftment = st2[,name_engraftment_sgb][match(.$Subject_ID, 
+                                                          rownames(st2))]) %>% 
+    dplyr::mutate(Strain_engraftment = ifelse(engraftment == 0, 
+                                              "No engraftment", 
+                                              "Engraftment")) %>% 
+    dplyr::mutate(Strain_engraftment = factor(Strain_engraftment, 
+                                              levels = c("No engraftment",
+                                                         "Engraftment"))) %>% 
+    dplyr::mutate(Group = paste0(Time, " ", Strain_engraftment)) %>% 
+    dplyr::mutate(Group = factor(Group, levels = c("Pre FMT No engraftment", 
+                                                   "Post FMT No engraftment", 
+                                                   "Pre FMT Engraftment", 
+                                                   "Post FMT Engraftment")))
+
+lmer_test <- summary(lmerTest::lmer(
+  name_sgb ~ engraftment * Time + (1|Subject_ID), 
+  data = comb_for_lmer))
+
+# for the barplot
+mp4_delta_fp <- mp4_delta %>% 
+  dplyr::select(all_of(name_sgb), all_of(name_engraftment_sgb)) %>% 
+  stats::setNames(c("name_sgb", "name_engraftment_sgb"))
+
+df2 <- 
+  mp4_delta_fp %>% 
+  data_summary(., varname="name_sgb", 
+               groupnames=c("name_engraftment_sgb")) %>% 
+  dplyr::mutate(time = c("Delta")) %>%  
+  dplyr::rename("delta_var" = median) %>% 
+  dplyr::mutate(Strain_engraftment = ifelse(name_engraftment_sgb==0, 
+                                            "No engraftment",
+                                            "Engraftment")) %>% 
+  dplyr::mutate(Strain_engraftment = factor(Strain_engraftment, 
+                                            levels = c("No engraftment", 
+                                                       "Engraftment"))) %>% 
+  dplyr::mutate(loc_plot = c(1.5, 3.5))
+
+
+p[[idx]] <-
+  ggplot() +
+  geom_boxplot(data = comb_for_lmer,
+               aes(x = Group, 
+                   y = name_sgb, 
+                   fill = Strain_engraftment),
+               alpha = 0.5,
+               width = 0.4,
+               show.legend = F) +
+  geom_point(data = comb_for_lmer,
+             aes(x = Group, 
+                 y = name_sgb, 
+                 col = Strain_engraftment),
+             size = 1.5, color = "black") +
+  geom_line(data = comb_for_lmer,
+            aes(x = Group, 
+                y = name_sgb, 
+                col = Strain_engraftment, 
+                group = Subject_ID),
+            color = "gray30") +
+  geom_hline(yintercept = 0) +
+  geom_bar(data = df2,
+           aes(x = loc_plot,
+               y = delta_var,
+               fill = Strain_engraftment),
+           stat = "identity",
+           alpha = 0.5,
+           color = "black", 
+           width = 0.4) +
+  geom_errorbar(data = df2,
+                aes(x = loc_plot,
+                    y = delta_var,
+                    xmin = loc_plot, 
+                    xmax = loc_plot,
+                    ymax = delta_var + (delta_var > 0)*sd,
+                    ymin = delta_var - (delta_var < 0)*sd),
+                position = position_dodge(), 
+                width = 0.2)  +
+  stat_pvalue_manual(data = data.frame(
+    group1 = 1.5, group2 = 3.5, 
+    p.adj = round(as.numeric(lmer_test$coefficients[20]),4)),
+    label = "p.adj",
+    y.position = max(comb_for_lmer$name_sgb, na.rm = T)*1.03,
+    tip.length = .01) +
+  ylab(label = bquote("Relative abundance -"~italic(.(part_name))~.(part_sgb))) +
+  xlab(label = "Time") +
+  theme_Publication() +
+  scale_fill_manual(name = "FMT group", 
+                    labels = c("No engraftment", 
+                               "Engraftment"),
+                    values=c("firebrick1", 
+                             "dodgerblue1",
+                             "firebrick1", 
+                             "dodgerblue1")) +
+  theme(legend.text.align = 0,
+        strip.background =  element_rect(fill = NA, 
+                                         colour = NA))
+} 
+
+p1 <- p[[2]] + theme(axis.text.x = element_blank())+ xlab("")
+p3 <- p[[3]] + theme(axis.text.x = element_blank())+ xlab("")
+pf <- p1 + p3 + p[[10]] + plot_layout(nrow = 3, guides = 'collect')
+```
+
+\newpage
+
+# Supplementary figure S1
+
+```{r Fig_S1a, fig.width=12, fig.height=16, out.width='100%', out.height='90%', echo = T}
+print(pf)
+```
+
+# Figure 4 and Supplementary figure S2 - Preparatory work
+## Note that both figures are created in the function "CCA_fun". For ease, I saved these figures in the result object. The code is listed in functions.R, available at GitHub.
+
+```{r Fig_4_S2_prep, echo = T}
+#Fix metadata
+met_post_comp <- met_post %>% 
+  dplyr::select(-Study_origin, -Weight)
+met_pre_comp <- met_pre[rownames(met_pre) %in% rownames(met_post_comp), 
+                        names(met_pre) %in% names(met_post_comp),]
+
+met_delta <- met_post_comp - met_pre_comp
+met_delta_comp_diast <- met_delta %>% 
+  dplyr::filter(!is.na(Diast)) %>% 
+  dplyr::select_if(~ !any(is.na(.))) %>% 
+  dplyr::select(c(Rd, Diast,EGPsupp, Insulin, HOMA))
+
+#metadata_delta x strain_bin - complete cases only (later with all data using lmer)
+st_bin_diast <- st2 %>% dplyr::filter(rownames(.) %in% rownames(met_delta_comp_diast))
+cca_res <- CCA_fun(X = met_delta_comp_diast, Y = st_bin_diast, 
+                   x_data_name = "Metadata", y_data_name = "Strain engraftment",
+                   color_x_data = "#440154FF", color_y_data ="#21908CFF",
+                   grid1 = seq(0.1, 1, length = 5),
+                   grid2 = seq(0.1, 1, length = 5),
+                   n_comp = 10,validation = "loo",
+                   name_map = paste0("diast_",  Sys.Date()),
+                   name_submap = "delta_met_strainsbin_no_na_variables_fin",
+                   cor.method = "spearman",
+                   output_path = paste0(path_data, "/plots/CCA"))
+```
+
+\newpage
+
+# Supplementary figure S2
+
+``` {r Fig_S2, fig.width=12, fig.height=6, out.width='100%', out.height='100%', echo = T}
+print(cca_res[["p_s2"]])
+```
+
+\newpage
+
+# Figure 4
+``` {r Fig_4, fig.width=10, fig.height=8, out.width='100%', out.height='100%', echo = T}
+print(cca_res[["pf4"]])
+```
+
+# Linear mixed-effect models
+``` {r lmer_engraftment, echo=T}
+all(rownames(met_pre) == rownames(met_post))
+
+met_post_comp <- met_post %>% 
+  dplyr::select(-c(Study_origin, Weight)) %>%
+  dplyr::mutate(Time = "Post", Subject_ID = rownames(.))
+met_pre_comp <- met_pre[rownames(met_pre) %in% rownames(met_post_comp), 
+                        names(met_pre) %in% names(met_post_comp),] %>% 
+  dplyr::mutate(Time = "Pre", Subject_ID = rownames(.))
+
+met_full_comp <- rbind(met_post_comp, met_pre_comp)
+rownames(met_full_comp)<-NULL
+
+pairs_oi <- cca_res$pairs_oi %>% head(10)
+
+#linear mixed effect models
+lmer_df <- data.frame(
+  var_dataset1 = numeric(0),
+  var_dataset2 = numeric(0),
+  estimate = numeric(0),
+  `p-value` = numeric(0))
+
+comb_for_lmer <- list()
+for (idx in 1:nrow(pairs_oi)){
+  name_clinparam <- pairs_oi$var_dataset1[idx]
+  name_strain <- pairs_oi$var_dataset2[idx]
+  comb_for_lmer[[idx]] <- merge(st2 %>% dplyr::select(all_of(name_strain)), 
+                                met_full_comp %>% dplyr::select(all_of(name_clinparam), 
+                                                                Time, Subject_ID), 
+                         by.x = "row.names", by.y = "Subject_ID") %>% 
+    dplyr::rename(Subject_ID = Row.names) %>% 
+    dplyr::mutate(Time = ifelse(Time == "Pre","Pre FMT", "Post FMT")) %>% 
+    dplyr::mutate(Time = factor(Time, levels = c("Pre FMT", "Post FMT"))) 
+  lmer_test <- summary(lmerTest::lmer(
+    comb_for_lmer[[idx]][,name_clinparam] ~ comb_for_lmer[[idx]][,name_strain] * 
+      Time + (1|Subject_ID), data = comb_for_lmer[[idx]]))
+  
+  lmer_df[idx,] <- c(name_clinparam, 
+                     name_strain, 
+                     lmer_test$coefficients[4], 
+                     lmer_test$coefficients[20]) 
+}
+
+lmer_df$p.adj <- p.adjust(lmer_df$p.value, method = "fdr")
+lmer_df %>% 
+  dplyr::select(-p.value) %>% 
+  print()
+```
+
+\newpage
+
+# Supplementary table S3
+
+```{r Table_S3, echo=T}
+## check if all rownames are aligned
+all(c(
+  rownames(mp4_pre) == rownames(mp4_post),
+  rownames(p_pre) == rownames(p_post),
+  rownames(m_pre) == rownames(m_post),
+  rownames(met_pre) == rownames(met_post),
+  rownames(mp4_pre) == rownames(m_post),
+  rownames(mp4_pre) == rownames(p_post),
+  rownames(mp4_pre) == rownames(met_post)
+))
+
+## Lists for the loops.
+dat_list <- list(mp4_pre, p_pre, m_pre, met_pre,
+                 mp4_post, p_post, m_post, met_post)
+dist_list <- vector(mode = "list", length = length(dat_list))
+names(dist_list)  <- c("mp4_pre", "p_pre", "m_pre", "met_pre",
+                       "mp4_post", "p_post", "m_post", "met_post")
+pcoa_list <- dist_list
+vector_list <- pcoa_list
+
+for(i in 1:length(dist_list)){
+  dist_list[[i]] <- vegan::vegdist(as.data.frame(compositions::clr(dat_list[[i]])), 
+                                   method = "euclidean")
+  pcoa_list[[i]] <- ape::pcoa(as.matrix(dist_list[[i]]))
+  vector_list[[i]] <- pcoa_list[[i]]$vectors
+}
+
+## All combinations of a list of 8 dataframes
+all_combinations <- utils::combn(length(vector_list), 2)
+proc_list <- vector(mode= "list", length = ncol(all_combinations))
+protest_list <- proc_list
+pl <- proc_list
+
+names_plot <- data.frame(names(dist_list), 
+                         c("Metaphlan pre-FMT","Pathways pre-FMT",
+                           "Metabolites pre-FMT","Metadata Pre-FMT",
+                           "Metaphlan post-FMT","Pathways post-FMT",
+                           "Metabolites post-FMT","Metadata Post-FMT")) %>% 
+  stats::setNames(c("short_name", "full_name"))
+
+df_sup <- data.frame(Dataset_1 = numeric(0), 
+                     Dataset_2 = numeric(0), 
+                     Sum_of_squares = numeric(0), 
+                     rho = numeric(0), 
+                     p.value = numeric(0))
+
+for (i in 1:ncol(all_combinations)) {
+  set.seed(1)
+  comb <- all_combinations[,i]
+  name_comb1 <- names(vector_list)[comb[1]]
+  name_comb2 <- names(vector_list)[comb[2]]
+  name1_plot <- names_plot[names_plot$short_name %in% name_comb1,]$full_name
+  name2_plot <- names_plot[names_plot$short_name %in% name_comb2,]$full_name
+  proc_list[[i]] <- vegan::procrustes(X = vector_list[[name_comb1]], 
+                                      Y = vector_list[[name_comb2]], 
+                                      symmetric=TRUE)
+  
+  protest_list[[i]] <- vegan::protest(X = vector_list[[name_comb1]], 
+                                      Y = vector_list[[name_comb2]], 
+                                      permutations = 999)
+  
+  df_sup[i, ] <- c(name1_plot,
+                   name2_plot,
+                   round(protest_list[[i]]$ss,2),
+                   round(protest_list[[i]]$t0,3), 
+                   protest_list[[i]]$signif)  
+}
+
+df_sup %>% 
+  .[order(as.numeric(.$p.value)),] %>% 
+  print()
+```
+
+# Supplementary figure S3 Preparatory work
+
+```{r Fig_S3_prep, echo=T}
+#strain engraftment
+st3 <- st2 %>%
+  dplyr::select("C. aerofaciens (SGB14546 group)", "F. saccharivorans (SGB4874)")
+
+#metab_delta
+m_delta <- m_post - m_pre
+
+metab_for_lmer <- metab %>% 
+  dplyr::mutate(Time = ifelse(grepl("MPP", rownames(.)), "Post FMT", "Pre FMT"),
+                Subject_ID = gsub("MPS_","",gsub("MPP_","", rownames(.)))) %>% 
+  dplyr::mutate(subject_ID_time = paste0(Subject_ID, "_", Time)) %>% 
+  dplyr::select(Time, Subject_ID, subject_ID_time, 
+                `4-guanidinobutanoate`, `2-oxoarginine*`)
+
+## For LMER
+met_post_comp <- met_post %>% 
+  dplyr::select(-c(Study_origin, Weight)) %>%
+  dplyr::mutate(Time = "Post FMT", Subject_ID = rownames(.))
+met_pre_comp <- met_pre[rownames(met_pre) %in% rownames(met_post_comp), 
+                        names(met_pre) %in% names(met_post_comp),] %>% 
+  dplyr::mutate(Time = "Pre FMT", Subject_ID = rownames(.))
+
+met_full_comp <- rbind(met_post_comp, met_pre_comp) %>% 
+  `rownames<-`(NULL)
+lmer_dat_diast <- merge(st3, met_full_comp %>% 
+                          dplyr::select(Diast, Time, Subject_ID), 
+                              by.x = "row.names", by.y = "Subject_ID") %>% 
+  dplyr::rename(Subject_ID = Row.names) %>% 
+  dplyr::mutate(subject_ID_time = paste0(Subject_ID, "_", Time)) %>% 
+  dplyr::select(Subject_ID, subject_ID_time, Time, Diast, everything())
+
+p_ox <- list()
+p_gua <- list()
+for (k in 5:ncol(lmer_dat_diast)){
+  n_p <- k-4
+  var_name_st <- names(lmer_dat_diast)[k]
+  for(l in 4:ncol(metab_for_lmer)){
+    var_name_metab <- names(metab_for_lmer)[l]
+    comb_for_lmer <- merge(metab_for_lmer %>% 
+                             dplyr::select(all_of(var_name_metab), subject_ID_time, 
+                                           Time, Subject_ID), 
+                           lmer_dat_diast %>% dplyr::select(all_of(var_name_st),
+                                                            subject_ID_time), 
+                           by = "subject_ID_time") %>% 
+      dplyr::mutate(Time = factor(Time, levels = c("Pre FMT", "Post FMT")))
+
+    lmer_test <- summary(lmerTest::lmer(
+      comb_for_lmer[,var_name_metab] ~ comb_for_lmer[,var_name_st] * Time + 
+        (1|Subject_ID), data = comb_for_lmer))
+    
+    # for the boxplot
+    comb_for_plot <- comb_for_lmer %>% 
+      dplyr::select(Subject_ID, all_of(var_name_metab), all_of(var_name_st), Time) %>% 
+      stats::setNames(c("Subject_ID","var_name_metab", "var_name_st", "Time")) %>% 
+      dplyr::mutate(Strain_engraftment = ifelse(var_name_st == 0, 
+                                                "No engraftment", 
+                                                "Engraftment")) %>%
+      dplyr::mutate(Strain_engraftment = factor(Strain_engraftment, 
+                                                levels = c("No engraftment",
+                                                           "Engraftment"))) %>% 
+      dplyr::mutate(Group = paste0(Time, " ", Strain_engraftment)) %>% 
+      dplyr::mutate(Group = factor(Group, levels = c("Pre FMT No engraftment", 
+                                                     "Post FMT No engraftment", 
+                                                     "Pre FMT Engraftment", 
+                                                     "Post FMT Engraftment")))
+    
+    # for the barplot
+    df2 <- merge(m_delta %>% dplyr::select(all_of(var_name_metab)), 
+                 st3 %>% dplyr::select(all_of(var_name_st)), by = "row.names") %>% 
+      tibble::column_to_rownames("Row.names") %>% 
+      stats::setNames(c("var_name_metab", "var_name_st")) %>% 
+      data_summary(., varname="var_name_metab", 
+                   groupnames=c("var_name_st")) %>% 
+      dplyr::mutate(time = c("Delta")) %>%  
+      dplyr::rename("delta_var" = median) %>% 
+      dplyr::mutate(Strain_engraftment = ifelse(var_name_st==0, 
+                                                "No engraftment", 
+                                                "Engraftment")) %>% 
+      dplyr::mutate(Strain_engraftment = factor(Strain_engraftment,
+                                                levels = c("No engraftment", 
+                                                           "Engraftment"))) %>% 
+      dplyr::mutate(loc_plot = c(1.5, 3.5))
+    
+    # combination plot of boxplot with barplot with p-value located at the lines
+    p <- ggplot() +
+      geom_boxplot(data = comb_for_plot,
+                 aes(x = Group, 
+                     y = var_name_metab, 
+                     fill = Strain_engraftment),
+                 alpha = 0.5,
+                 width = 0.5,
+                 show.legend = F) +
+    geom_point(data = comb_for_plot,
+               aes(x = Group, 
+                   y = var_name_metab, 
+                   col = Strain_engraftment),
+               size = 1.5, color = "black") +
+    geom_line(data = comb_for_plot,
+              aes(x = Group, 
+                  y = var_name_metab, 
+                  col = Strain_engraftment, 
+                  group = Subject_ID),
+              color = "gray30") +
+    geom_hline(yintercept = 0) +
+    geom_bar(data = df2,
+             aes(x = loc_plot,
+                 y = delta_var,
+                 fill = Strain_engraftment),
+             stat = "identity",
+             alpha = 0.5,
+             color = "black", 
+             width = 0.5) +
+    geom_errorbar(data = df2,
+                  aes(x = loc_plot,
+                      y = delta_var,
+                      xmin = loc_plot, 
+                      xmax = loc_plot,
+                      ymax = delta_var + (delta_var > 0)*sd,
+                      ymin = delta_var - (delta_var < 0)*sd),
+                  position = position_dodge(), 
+                  width = 0.2)  +
+    stat_pvalue_manual(data = 
+                         data.frame(group1 = 1.5,
+                                    group2 = 3.5,
+                                    p.adj = round(
+                                      as.numeric(lmer_test$coefficients[20]),3)),
+                       label = "p.adj",
+                       y.position = max(comb_for_plot$var_name_metab, na.rm = T)*1.05,
+                       tip.length = .01) +
+    ylab(label = var_name_metab) +
+    xlab(label = "Time") +
+    scale_x_discrete(labels = c(levels(comb_for_plot$Time), 
+                                levels(comb_for_plot$Time))) +
+    theme_Publication() +
+    scale_fill_manual(name = var_name_st, labels = c("No engraftment", 
+                                                     "Engraftment"),
+                      values=c("firebrick1", 
+                               "dodgerblue1",
+                               "firebrick1", 
+                               "dodgerblue1")) +
+    theme(legend.text.align = 0,
+          strip.background =  element_rect(fill = NA, 
+                                           colour = NA))
+  if(l == 4){p_gua[[n_p]] <- p}
+  if(l == 5){p_ox[[n_p]] <- p + theme(legend.position ="none")}
+  }
+}
+
+p_s3 <- p_ox[[1]] + p_gua[[1]] + p_ox[[2]] + p_gua[[2]]
+```
+
+\newpage 
+
+# Supplementary figure S3
+
+```{r fig_S3, fig.width=12, fig.height=8, out.width='100%', out.height='100%', echo = T}
+print(p_s3)
+```
+
+# Session info
+```{r sessioninfo, echo = F}
+print(sessionInfo())
+```
