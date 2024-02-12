@@ -11,8 +11,7 @@ st <- rbind(st, st2); rm(st2)
 
 st <- st %>% dplyr::filter(!grepl(paste(c("V1", "W2", "W3", "W12"), collapse = "|"), X1) & !grepl(paste(c("V1", "W2", "W3", "W12"), collapse = "|"), X2))
 
-### replace the sample swap (mps_M05 should be MPS_M09 and vise versa)
-#reason needed here -> for some reason I only replaced the subjects in the pipeline R script, but saved it together with the normal (unadjusted) numbers.
+### replace the sample swap (MPS_M05 should be MPS_M09 and vise versa)
 st$`X1` <- ifelse(st$`X1`=="MPS_M05","MPS_M09",
                   ifelse(st$`X1`=="MPS_M09","MPS_M05", st$`X1`))
 st$`X2` <- ifelse(st$`X2`=="MPS_M05","MPS_M09",
@@ -26,8 +25,7 @@ ngd <- rbind(ngd, ngd2); rm(ngd2)
 
 ngd <- ngd %>% dplyr::filter(!grepl(paste(c("V1", "W2", "W3", "W12"), collapse = "|"), X1) & !grepl(paste(c("V1", "W2", "W3", "W12"), collapse = "|"), X2))
 
-### replace the sample swap (mps_M05 should be MPS_M09 and vise versa)
-#reason needed here -> for some reason I only replaced the subjects in the pipeline R script, but saved it together with the normal (unadjusted) numbers.
+### replace the sample swap (MPS_M05 should be MPS_M09 and vise versa)
 ngd$`X1` <- ifelse(ngd$`X1`=="MPS_M05","MPS_M09",
                   ifelse(ngd$`X1`=="MPS_M09","MPS_M05", ngd$`X1`))
 ngd$`X2` <- ifelse(ngd$`X2`=="MPS_M05","MPS_M09",
