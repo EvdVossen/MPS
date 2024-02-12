@@ -6,7 +6,7 @@ path_data <- "~/Data_files/MPS/Eduard/Data_transfer/"
 setwd(path_data)
 
 st <- rio::import(paste0(path_data, "Pipeline_output/Table_strainsharing.txt"))
-st2 <- st %>% dplyr::rename("X2"= "X1","X1" = "X2") %>% dplyr::select(X1, X2, everything())#easiest solution for later issues with one missing value in the matrix
+st2 <- st %>% dplyr::rename("X2"= "X1","X1" = "X2") %>% dplyr::select(X1, X2, everything())
 st <- rbind(st, st2); rm(st2)
 
 st <- st %>% dplyr::filter(!grepl(paste(c("V1", "W2", "W3", "W12"), collapse = "|"), X1) & !grepl(paste(c("V1", "W2", "W3", "W12"), collapse = "|"), X2))
