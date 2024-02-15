@@ -4,7 +4,7 @@ author:
 - "Eduard W. J. van der Vossen,   Mark Davids,  Bas Voermans, "
 - "Annick V. Hartstra, Annefleur M. Koopen, Pieter de Groot, "
 - "Evgeni Levin,  Max Nieuwdorp"
-date: "Last compiled on: 17/01/2024"
+date: "Last compiled on: 15/02/2024"
 output:
   html_document: default
   pdf_document:
@@ -413,11 +413,7 @@ legend(NULL, x=1.0,y=.7 ,lty=1, col=c("gray95","gray50","gray1"),
 \newpage
 
 ## Figure 2 preparatory work
-### Formal definition (as stated in Ianiro et al., 2022 Nature Medicine; DOI: 10.1038/s41591-022-01964-3):
-### The fraction of retained strains is defined as: the fraction of post-FMT strains shared with pre-FMT 
-### (shared strains between post-FMT and pre-FMT divided by the number of strains profiled at post-FMT)
-### The fraction of donor strains as the fraction of post-FMT strains shared with
-### the donor (shared strains between post-FMT and donor divided by the number of strains profiled at post-FMT).
+##### Formal definition (as stated in Ianiro et al., 2022 Nature Medicine; DOI: 10.1038/s41591-022-01964-3): The fraction of retained strains is defined as: the fraction of post-FMT strains shared with pre-FMT (shared strains between post-FMT and pre-FMT divided by the number of strains profiled at post-FMT) The fraction of donor strains as the fraction of post-FMT strains shared with the donor (shared strains between post-FMT and donor divided by the number of strains profiled at post-FMT).
 
 ```{r Fig_2_preparatory, echo = T}
 triad_ff <- triad %>% 
@@ -688,8 +684,6 @@ print(df)
 # Figure 3 Preparatory work
 
 ```{r, Figure_3_prep, echo = T}
-mp4_post <- mp4 %>% dplyr::filter(rownames(.) %in% triad$Post_FMT)
-
 mp4_stats <- apply(mp4,2,summary) %>% 
   t() %>%  
   as.data.frame()
@@ -980,7 +974,7 @@ print(pf)
 ```
 
 # Figure 4 and Supplementary figure S2 - Preparatory work
-## Note that both figures are created in the function "CCA_fun". For ease, I saved these figures in the result object. The code is listed in functions.R, available at GitHub.
+##### Note that both figures are created in the function "CCA_fun". For ease, I saved these figures in the result object. The code is listed in functions.R, available at GitHub.
 
 ```{r Fig_4_S2_prep, echo = T}
 #Fix metadata
