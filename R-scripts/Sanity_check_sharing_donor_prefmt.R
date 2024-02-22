@@ -33,7 +33,6 @@ ngd$`X2` <- ifelse(ngd$`X2`=="MPS_M05","MPS_M09",
 
 triad  <- rio::import(paste0(path_data, "Intermediate_files/Triad_numbers.xlsx"))
 
-st1 <- st
 #### For loop to do it sample-wise
 for (idx in 1: nrow(triad)){
   cat(paste0("Big loop number: ", (idx), "\n"))
