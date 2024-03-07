@@ -5,7 +5,6 @@ library(igraph)
 library(ggplot2)
 source("~/Data_files/MPS/Eduard/Data_transfer/R-scripts/functions.R")
 
-# path <- "~/Data_files/MPS/Eduard/"
 setwd(path_data)
 
 #import files (imports are done in the functions script)
