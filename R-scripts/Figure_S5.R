@@ -61,5 +61,5 @@ for (j in 1:nrow(df_sig)){
               p.title = "P-Value: {stat.test.p.value}")
 }
 p_cor <- wrap_plots(p)
-ggsave(filename = "Figure_S5.pdf", plot = p_cor, device = "pdf",
+ggsave(filename = "Supplementary_Figure_S5.pdf", plot = p_cor, device = "pdf",
        path = "Manuscript/Supplementary_information/", width = 16, height = 24)
