@@ -1,11 +1,9 @@
 rm(list=ls())
-library(tidyverse)
-library(ggplot2)
-library(ggpubr)
-library(stringr)
+
+#Load packages and functions
 source("~/Data_files/MPS/Eduard/Data_transfer/R-scripts/functions.R")
 
-#set path
+#Set working directory
 setwd(path_data)
 
 #import files (imports are done in the functions script)
@@ -134,8 +132,8 @@ p[[idx]] <-
 library(patchwork)
 p1 <- p[[2]] + theme(axis.text.x = element_blank())+ xlab("")
 p3 <- p[[3]] + theme(axis.text.x = element_blank())+ xlab("")
-p_s1 <- p1 + p3 + p[[10]] + plot_layout(nrow = 3, guides = 'collect')
+p_s2 <- p1 + p3 + p[[10]] + plot_layout(nrow = 3, guides = 'collect')
 
-ggsave(filename = paste0("Supplementary_figure_S1.pdf"), plot = p_s1, device = "pdf",
+ggsave(filename = paste0("Supplementary_Figure_S2.pdf"), plot = p_s2, device = "pdf",
        path =  "Manuscript/Supplementary_information/",
        height = 18, width = 12)
