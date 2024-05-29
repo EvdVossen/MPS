@@ -1,12 +1,10 @@
 # Script to find the most engrafting SGBs with their names.
 rm(list=ls())
 
-library(tidyverse)
-library(ggplot2)
+#Load packages and functions
 source("~/Data_files/MPS/Eduard/Data_transfer/R-scripts/functions.R")
-library(ggrepel)
-library(patchwork)
 
+#Set working directory
 setwd(path_data)
 
 #import files (imports are done in the functions script)
@@ -62,6 +60,61 @@ ggplot(top_feat_30, aes(x = reorder(plot_name, as.double((n_true/nrow(mp4_post))
   scale_y_continuous(limits = c(0,50)) +
   coord_flip()
 
+#### addition heatmap
+st_hm <- st[grepl("MPS_H", st$X1) & grepl("MPP_M", st$X2),] %>% 
+  dplyr::filter(paste0(.$X1, .$X2) %in% paste0(triad$Donor_Sample_ID, triad$Post_FMT)) %>% 
+  dplyr::mutate(Subject_ID = gsub("MPP_","", X2)) %>% 
+  tibble::column_to_rownames("Subject_ID") %>% 
+  dplyr::select(all_of(rownames(top_feat_30))) %>%
+  dplyr::mutate(across(everything(), ~ replace(., is.na(.), FALSE))) %>% #comment this partif also white should be in (similar to figure 1 "analyses")
+  setNames(top_feat_30$plot_name[match(names(.), top_feat_30$SGB_ID)]) %>% 
+  dplyr::mutate(`Study origin` = factor(str_to_title(triad$Study_origin)[match(rownames(.), gsub("MP-","", triad$Pt_ID))], levels = c("Appetite","Fatmed","Febaligo")),
+                Subject_ID = rownames(.)) %>% 
+  dplyr::arrange(`Study origin`, as.numeric(gsub("M","", rownames(.)))) %>%
+  dplyr::mutate(Subject_ID = factor(Subject_ID, levels = unique(.$Subject_ID))) %>%
+  ungroup()
+
+st_hm_long <- st_hm %>% 
+  tidyr::pivot_longer(data = ., cols = 1:30, values_to = "FMT Engraftment") %>% 
+  dplyr::mutate(name = factor(name, levels = c(rev(top_feat_30$plot_name))))
+
+#"firebrick1", "dodgerblue1"
+p_hm <-
+ggplot(st_hm_long, aes(x = Subject_ID, y = name, fill = `FMT Engraftment`)) +
+  geom_tile(alpha = 0.6) +
+  labs(x = "", y = "", fill = "FMT Engraftment") +
+  theme_minimal() +
+        # panel.grid = element_blank()) +
+        # axis.text.x.top = element_text(angle = 45, hjust = 0)) +  # Adjust top x-axis labels
+  scale_x_discrete(position = "top") +
+  scale_fill_manual(values = c("firebrick1", "dodgerblue1"), labels = c("No engraftment", "Engraftment")) +
+  theme(panel.grid = element_blank(),
+        axis.text.x = element_blank(),
+        legend.title = element_text(size = 12, face = "bold"),
+        legend.text = element_text(size = 10),
+        legend.key.size = unit(1, "lines"))
+p_cb <-
+  ggplot(st_hm)+
+  geom_bar(mapping = aes(x = Subject_ID, y = 1, fill = `Study origin`), 
+           stat = "identity", 
+           width = 1)+
+  theme_void()+
+  labs(x = "") +
+  scale_fill_manual(values = c("Appetite" = "#F8766D", "Fatmed" = "#00BA38", "Febaligo" = "#619CFF"),
+                    labels = c("Appetite" = "Appetite (n = 12)", "Fatmed" = "Fatmed (n = 12)", "Febaligo" = "Febaligo (n = 5)"))+
+  theme(panel.spacing.x = unit(1, "mm"),
+        legend.title = element_text(size = 12, face = "bold"),
+        legend.text = element_text(size = 10),
+        legend.key.size = unit(1, "lines"))
+p_blank <- 
+ggplot(st_hm) +
+  geom_blank(mapping = aes(x = Subject_ID, y = 1)) +
+  theme_void() +
+  theme(panel.spacing.x = unit(1, "mm")) +
+  labs(x = "")
+####
+
+
 
 mp4_post_top <- mp4_post_top %>% 
   mutate(plot_name = top_feat_30$plot_name[match(.$SGB_ID, top_feat_30$SGB_ID)]) %>% 
@@ -93,13 +146,27 @@ ggplot(mp4_post_top30_engrafters, aes(y=relative_abundance, x=plot_name)) +
   xlab(" ") + ylab("Relative abundance (%)") +
   theme(axis.title.y=element_blank(),
         axis.text.y=element_blank(),
-        axis.ticks.y=element_blank()) +
+        axis.ticks.y=element_blank(),
+        legend.title = element_text(size = 12, face = "bold"),
+        legend.text = element_text(size = 10),
+        legend.key.size = unit(1, "lines")) +
   labs(fill = "Phylum") +
   coord_flip(ylim = c(0, 10))
 
-pf3 <- p2 + p3
-ggsave(filename = "Figure_3.pdf",plot = pf3, device = "pdf",
+## Final part with plot heatmap
+legend <- plot_grid(get_legend(p_cb), get_legend(p_hm), get_legend(p3), 
+                    get_legend(p_blank),get_legend(p_blank),get_legend(p_blank), #Quick & not so nice method to condense the legends 
+                    ncol = 1)
+p_hm <- p_hm + theme(legend.position = "none")
+p_cb <- p_cb + theme(legend.position = "none")
+p3 <- p3 + theme(legend.position = "none")
+plot <- plot_grid(p_cb, p_hm, p_blank, align = "v", ncol = 1, axis = "tb", rel_heights = c(0.5, 15, 1.))
+plot2 <- plot_grid(p_blank, p3, align = "v", ncol = 1, axis = "tb", rel_heights = c(0.3, 15))
+
+pf4 <- plot + plot2 + legend + plot_layout(widths = c(4, 3,1))
+ggsave(filename = "Figure_4.pdf",plot = pf4, device = "pdf",
        path = "Manuscript/Main_Figures", height = 10, width = 18)
+##
 
 top_list_cca <- top_feat_30 %>% filter(median_abundance_post_FMT > 1 | mean_abundance_post_FMT > 1 | n_true >= 10) %>%
   `rownames<-`(.$SGB_ID) %>% 
