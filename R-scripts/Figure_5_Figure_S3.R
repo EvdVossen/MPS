@@ -1,17 +1,9 @@
-## CCA analysis using the metadata + metabolites found in a different cohort (HELIUS) via machine learning (which are linked to BP)
 rm(list=ls())
 
-# library(magrittr)
-library(mixOmics)
-library(corrplot)
-library(tidyverse)
-library(ggplot2)
-library(ggpubr)
-library(ggsignif)
-library(viridis)
+#Load packages and functions
 source("~/Data_files/MPS/Eduard/Data_transfer/R-scripts/functions.R")
 
-#set path
+#Set working directory
 setwd(path_data)
 
 #import files (imports are done in the functions script)
@@ -117,3 +109,9 @@ for (idx in 1:nrow(pairs_oi)){
 #Results lmer strain engraftment and clinical parameters
 lmer_df$p.adj <- p.adjust(lmer_df$p.value, method = "fdr")
 print(lmer_df)
+
+#Supplementary Figure S3
+print(cca_res$p_s3)
+
+#Figure 5
+print(cca_res$pf5)
