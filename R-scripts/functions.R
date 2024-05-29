@@ -1,5 +1,19 @@
+#Packages used within the project
+library(corrplot)
+library(ggplot2)
+library(ggrepel)
+library(ggpubr)
+library(ggsignif)
+library(igraph)
+library(mixOmics)
+library(stringr)
 library(tidyverse)
+library(viridis)
+library(vegan)
+library(patchwork)
+library(cowplot)
 
+#Working directory
 path_data <- "~/Data_files/MPS/Eduard/Data_transfer/"
 
 get_data <- function(st = F, triad = F, triad_long = F, met = F, mp4 = F, path_dat=F, metab = F){
@@ -313,7 +327,7 @@ If no grid is specified, than the default is taken: seq(0.001, 1, length = 5) \n
   ggsave(filename = "Lambda_est_CCA_correlations.pdf", plot = p_hc, device = "pdf", path = file_path, height = 10, width = 16)
   ggsave(filename = "Supplementary_figure_S2.pdf", plot = p_hc, device = "pdf", 
          path = paste0(getwd(), "/Manuscript/Supplementary_information/"), height = 10, width = 16)
-  cca_res[["p_s2"]] <- p_hc #Small line to add supplemental figure in the cca_res object
+  cca_res[["p_s3"]] <- p_hc #Small line to add supplemental figure in the cca_res object
   
   
   # Add original dataframes to the CCA_RES object
@@ -399,7 +413,7 @@ plotrCCA <- function(object, x_data_name, y_data_name, threshold_cor = 0.8,
     grDevices::cairo_pdf(filename = paste0(getwd(), "/Manuscript/Main_Figures/Figure_4.pdf"), width = 16, height = 12)
     base::plot(p)
     grDevices::dev.off()  
-    object[["pf4"]] <- p #Small line to add Figure 4 in the cca_res object
+    object[["pf5"]] <- p #Small line to add Figure 5 in the cca_res object
     # Filter points from dataset_1 (e.g., parameter A)
     dataset_1_points <- df_comb %>%
       dplyr::filter(Block == x_data_name & distance_to_inner_circle > rad.in) %>% 
@@ -466,7 +480,7 @@ plotrCCA <- function(object, x_data_name, y_data_name, threshold_cor = 0.8,
       base::plot(p)
       grDevices::dev.off()
       
-      object[["pf4"]] <- p #Small line to add Figure 4 in the cca_res object
+      object[["pf5"]] <- p #Small line to add Figure 5 in the cca_res object
       
       # Filter points from dataset_1 (e.g., parameter A)
       dataset_1_points <- df_comb %>%
