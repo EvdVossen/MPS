@@ -1,17 +1,9 @@
-## CCA analysis using the metadata + metabolites found in a different cohort (HELIUS) via machine learning (which are linked to BP)
 rm(list=ls())
 
-# library(magrittr)
-library(mixOmics)
-library(corrplot)
-library(tidyverse)
-library(ggplot2)
-library(ggpubr)
-library(ggsignif)
-library(viridis)
+#Load packages and functions
 source("~/Data_files/MPS/Eduard/Data_transfer/R-scripts/functions.R")
 
-#set path
+#Set working directory
 setwd(path_data)
 
 #import files (imports are done in the functions script)
@@ -142,14 +134,15 @@ for (k in 5:ncol(lmer_dat_diast)){
                       values=c("firebrick1", "dodgerblue1","firebrick1", "dodgerblue1")) +
     theme(legend.text.align = 0,
           strip.background =  element_rect(fill = NA, 
-                                           colour = NA))
+                                           colour = NA),
+          plot.margin = unit(c(1, 1, 1, 1), "cm"))
   if(l == 4){p_gua[[n_p]] <- p}
   if(l == 5){p_ox[[n_p]] <- p + theme(legend.position ="none")}
   }
 }
 
 library(patchwork)
-p_s3 <- p_ox[[1]] + p_gua[[1]] +
+p_s6 <- p_ox[[1]] + p_gua[[1]] +
   p_ox[[2]] + p_gua[[2]]
 
-ggsave(filename = "Supplementary_figure_S3.pdf", plot = p_s3, device = "pdf", path = "Manuscript/Supplementary_information/", height = 8, width = 12)
+ggsave(filename = "Supplementary_Figure_S6.pdf", plot = p_s6, device = "pdf", path = "Manuscript/Supplementary_information/", height = 9, width = 12)
