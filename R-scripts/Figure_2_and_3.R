@@ -1,10 +1,9 @@
 rm(list=ls())
 
-library(tidyverse)
-library(igraph)
-library(ggplot2)
+#Load packages and functions
 source("~/Data_files/MPS/Eduard/Data_transfer/R-scripts/functions.R")
 
+#Set working directory
 setwd(path_data)
 
 #import files (imports are done in the functions script)
@@ -17,31 +16,31 @@ appetite <- triad[triad$Study_origin=="APPETITE" & triad$Intervention==1,]
 febaligo <- triad[triad$Study_origin=="FEBALIGO",]
 
 fatmed_met <- fatmed %>% 
-  mutate(donor_name_plot=LETTERS[match(.$Donor_Sample_ID, unique(.$Donor_Sample_ID))]) %>% 
-  group_by(donor_name_plot) %>%
-  mutate(subject_name_plot = paste0(donor_name_plot, row_number())) %>% 
+  dplyr::mutate(donor_name_plot=LETTERS[match(.$Donor_Sample_ID, unique(.$Donor_Sample_ID))]) %>% 
+  dplyr::group_by(donor_name_plot) %>%
+  dplyr::mutate(subject_name_plot = paste0(donor_name_plot, row_number())) %>% 
   gather("Sample_type", "Subject_ID", 3:5) %>% 
-  mutate(plot_names = ifelse(Sample_type=="Donor_Sample_ID", donor_name_plot, subject_name_plot)) %>% 
+  dplyr::mutate(plot_names = ifelse(Sample_type=="Donor_Sample_ID", donor_name_plot, subject_name_plot)) %>% 
   ungroup() %>% 
   dplyr::select(-c(Pt_ID, Triad, Study_origin, subject_name_plot,donor_name_plot)) %>% 
   distinct()
 
 appetite_met <- appetite %>% 
-  mutate(donor_name_plot=LETTERS[match(.$Donor_Sample_ID, unique(.$Donor_Sample_ID))]) %>% 
-  group_by(donor_name_plot) %>%
-  mutate(subject_name_plot = paste0(donor_name_plot, row_number())) %>% 
+  dplyr::mutate(donor_name_plot=LETTERS[match(.$Donor_Sample_ID, unique(.$Donor_Sample_ID))]) %>% 
+  dplyr::group_by(donor_name_plot) %>%
+  dplyr::mutate(subject_name_plot = paste0(donor_name_plot, row_number())) %>% 
   gather("Sample_type", "Subject_ID", 3:5) %>% 
-  mutate(plot_names = ifelse(Sample_type=="Donor_Sample_ID", donor_name_plot, subject_name_plot)) %>% 
+  dplyr::mutate(plot_names = ifelse(Sample_type=="Donor_Sample_ID", donor_name_plot, subject_name_plot)) %>% 
   ungroup() %>% 
   dplyr::select(-c(Pt_ID, Triad, Study_origin, subject_name_plot,donor_name_plot)) %>% 
   distinct()
 
 febaligo_met <- febaligo %>% 
-  mutate(donor_name_plot=LETTERS[match(.$Donor_Sample_ID, unique(.$Donor_Sample_ID))]) %>% 
-  group_by(donor_name_plot) %>%
-  mutate(subject_name_plot = paste0(donor_name_plot, row_number())) %>% 
+  dplyr::mutate(donor_name_plot=LETTERS[match(.$Donor_Sample_ID, unique(.$Donor_Sample_ID))]) %>% 
+  dplyr::group_by(donor_name_plot) %>%
+  dplyr::mutate(subject_name_plot = paste0(donor_name_plot, row_number())) %>% 
   gather("Sample_type", "Subject_ID", 3:5) %>%
-  mutate(plot_names = ifelse(Sample_type=="Donor_Sample_ID", donor_name_plot, subject_name_plot)) %>% 
+  dplyr::mutate(plot_names = ifelse(Sample_type=="Donor_Sample_ID", donor_name_plot, subject_name_plot)) %>% 
   ungroup() %>% 
   dplyr::select(-c(Pt_ID, Triad, Study_origin, subject_name_plot,donor_name_plot)) %>% 
   distinct()
@@ -97,10 +96,10 @@ st_feb <- st %>%
   dplyr::filter(X1 %in% febaligo_met$Subject_ID & X2 %in% febaligo_met$Subject_ID) %>%
   dplyr::select(1,2, where(is.logical)) %>% 
   rowwise() %>% 
-  mutate(true_counts = sum(c_across(3:ncol(.)),na.rm = T),
+  dplyr::mutate(true_counts = sum(c_across(3:ncol(.)),na.rm = T),
          false_counts = sum(!c_across(3:ncol(.)),na.rm = T)) %>% 
   ungroup() %>% 
-  mutate(shared_strain_percentage = round((true_counts / (true_counts+false_counts))*100),0) %>% 
+  dplyr::mutate(shared_strain_percentage = round((true_counts / (true_counts+false_counts))*100),0) %>% 
   dplyr::select(X1,X2, shared_strain_percentage) %>% 
   tidyr::pivot_wider(., names_from = X1, values_from = shared_strain_percentage) %>% 
   column_to_rownames("X2") %>% 
@@ -113,10 +112,10 @@ st_fat <- st %>%
   dplyr::filter(X1 %in% fatmed_met$Subject_ID & X2 %in% fatmed_met$Subject_ID) %>%
   dplyr::select(1,2, where(is.logical)) %>% 
   rowwise() %>% 
-  mutate(true_counts = sum(c_across(3:ncol(.)),na.rm = T),
+  dplyr::mutate(true_counts = sum(c_across(3:ncol(.)),na.rm = T),
          false_counts = sum(!c_across(3:ncol(.)),na.rm = T)) %>% 
   ungroup() %>% 
-  mutate(shared_strain_percentage = round((true_counts / (true_counts+false_counts))*100),0) %>% 
+  dplyr::mutate(shared_strain_percentage = round((true_counts / (true_counts+false_counts))*100),0) %>% 
   dplyr::select(X1,X2, shared_strain_percentage) %>% 
   tidyr::pivot_wider(., names_from = X1, values_from = shared_strain_percentage) %>% 
   column_to_rownames("X2") %>% 
@@ -129,10 +128,10 @@ st_app <-   st %>%
   dplyr::filter(X1 %in% appetite_met$Subject_ID & X2 %in% appetite_met$Subject_ID) %>%
   dplyr::select(1,2, where(is.logical)) %>% 
   rowwise() %>% 
-  mutate(true_counts = sum(c_across(3:ncol(.)),na.rm = T),
+  dplyr::mutate(true_counts = sum(c_across(3:ncol(.)),na.rm = T),
          false_counts = sum(!c_across(3:ncol(.)),na.rm = T)) %>% 
   ungroup() %>% 
-  mutate(shared_strain_percentage = round((true_counts / (true_counts+false_counts))*100),0) %>% 
+  dplyr::mutate(shared_strain_percentage = round((true_counts / (true_counts+false_counts))*100),0) %>% 
   dplyr::select(X1,X2, shared_strain_percentage) %>% 
   tidyr::pivot_wider(., names_from = X1, values_from = shared_strain_percentage) %>% 
   column_to_rownames("X2") %>% 
@@ -232,7 +231,7 @@ g1_app <- g_app
 E(g1_app)[E(g1_app)$weight <=15]$color <- NA
 
 #Saving the figure
-cairo_pdf(filename ="Manuscript/Main_Figures/Figure_1.pdf", width = 34, height = 8)
+cairo_pdf(filename ="Manuscript/Main_Figures/Figure_2.pdf", width = 34, height = 8)
 
 # Set up the layout with 1 row and 3 columns
 par(mfrow = c(1, 4), oma = c(0, 0, 0, 0), mar = c(4, 4, 2, 1), cex.main = 2.0)
@@ -258,7 +257,7 @@ plot(g1_app,
      edge.width = 3)
 
 # Add a custom main title with reduced line height
-title(main = "Appetite study")
+title(main = paste0("Appetite study (n = ", nrow(appetite), ")"))
 
 # Plot 2: Fatmed study
 set.seed(1)
@@ -279,7 +278,7 @@ plot(g1_fat,
      layout = layout.fruchterman.reingold,
      add = TRUE,
      edge.width = 3)
-title(main = "Fatmed study")
+title(main = paste0("Fatmed study (n = ", nrow(fatmed), ")"))
 
 # Plot 3: Febaligo study
 set.seed(1)
@@ -300,7 +299,7 @@ plot(g1_feb,
      layout = layout.fruchterman.reingold,
      add = TRUE,
      edge.width = 3)
-title(main = "Febaligo study")
+title(main = paste0("Febaligo study (n = ", nrow(febaligo), ")"))
 
 # Plot 4: Legend
 plot(NULL)
@@ -352,14 +351,16 @@ df_fractionfig <- triad %>%
                 Donor_sharing_rate = Donor_sharing_counts / total_strains_postfmt) %>% 
   dplyr::select(-c(donor_comb, pre_comb))
 
+rio::export(df_fractionfig, "Intermediate_files/Strainsharing_global_information.xlsx")
+
 # Assuming df_centroids is your centroid data frame
 df_centroids <- df_fractionfig %>%
-  group_by(Study_origin) %>%
-  summarize(
+  dplyr::group_by(Study_origin) %>%
+  dplyr::summarize(
     centroid_x = mean(Pre_FMT_sharing_rate),
     centroid_y = mean(Donor_sharing_rate))
 
-p2 <- ggplot(data = df_fractionfig, aes(x = Pre_FMT_sharing_rate, y = Donor_sharing_rate)) +
+p3 <- ggplot(data = df_fractionfig, aes(x = Pre_FMT_sharing_rate, y = Donor_sharing_rate)) +
   geom_point(aes(color = Study_origin), size = 2) +
   geom_point(data = df_centroids, aes(x = centroid_x, y = centroid_y, color = Study_origin), size = 4, shape = 17, show.legend = F) +
   theme_Publication() +
@@ -371,11 +372,13 @@ p2 <- ggplot(data = df_fractionfig, aes(x = Pre_FMT_sharing_rate, y = Donor_shar
   ylab("Fraction of Post-FMT strains shared with donor") +
   scale_color_manual(
     name = "Study",
-    labels = c("Appetite", "Fatmed", "Febaligo"),
+    labels = c(paste0("Appetite (n = ", nrow(appetite), ")"), 
+               paste0("Fatmed (n = ", nrow(fatmed), ")"),
+               paste0("Febaligo (n = ", nrow(febaligo), ")")),
     values = c("#F8766D", "#00BA38", "#619CFF")
   ) +
   guides(size = "none")
-ggsave(filename = "Figure_2.pdf",plot = p2,
+ggsave(filename = "Figure_3.pdf",plot = p3,
 path = "Manuscript/Main_Figures/", height = 7, width = 8)
 
 #### Permanova on strain-sharing-based dissimilarities
@@ -399,7 +402,7 @@ st_dis_feb <- st_dissimilarity %>%
   dplyr::filter(X1 %in% febaligo_met$Subject_ID & X2 %in% febaligo_met$Subject_ID) %>% 
   tidyr::pivot_wider(., names_from = X1, values_from = Dissimilarity) %>% 
   column_to_rownames("X2") %>% 
-  mutate_all(~ replace_na(., 0)) %>%
+  dplyr::mutate_all(~ replace_na(., 0)) %>%
   dplyr::select(unique(febaligo_met$Subject_ID)) %>% 
   t(.) %>% 
   as.data.frame(.) %>% 
@@ -409,7 +412,7 @@ st_dis_fat <- st_dissimilarity %>%
   dplyr::filter(X1 %in% fatmed_met$Subject_ID & X2 %in% fatmed_met$Subject_ID) %>% 
   tidyr::pivot_wider(., names_from = X1, values_from = Dissimilarity) %>% 
   column_to_rownames("X2") %>% 
-  mutate_all(~ replace_na(., 0)) %>%
+  dplyr::mutate_all(~ replace_na(., 0)) %>%
   dplyr::select(unique(fatmed_met$Subject_ID)) %>% 
   t(.) %>% 
   as.data.frame(.) %>% 
@@ -419,7 +422,7 @@ st_dis_appetite <- st_dissimilarity %>%
   dplyr::filter(X1 %in% appetite_met$Subject_ID & X2 %in% appetite_met$Subject_ID) %>% 
   tidyr::pivot_wider(., names_from = X1, values_from = Dissimilarity) %>% 
   column_to_rownames("X2") %>% 
-  mutate_all(~ replace_na(., 0)) %>%
+  dplyr::mutate_all(~ replace_na(., 0)) %>%
   dplyr::select(unique(appetite_met$Subject_ID)) %>% 
   t(.) %>% 
   as.data.frame(.) %>% 
@@ -438,12 +441,12 @@ febaligo_pp <- febaligo %>% gather("Time", "Subject", 4:5)
 donors <- colnames(as.matrix(st_dis_feb)) %in% febaligo_met$Subject_ID[1:2]
 subjects <- !colnames(as.matrix(st_dis_feb)) %in% febaligo_met$Subject_ID[1:2]
 df.long <- st_dis_feb %>% 
-  mutate(rownames = rownames(.))
+  dplyr::mutate(rownames = rownames(.))
 df.long <- reshape2::melt(df.long[subjects, donors]) %>%
   setNames(c("Subject","Donor", "Dissimilarity")) %>% 
-  mutate(TF_donor = ifelse(paste0(.$Subject, .$Donor) %in% paste0(febaligo_pp$Subject, febaligo_pp$Donor_Sample_ID), T, F), 
+  dplyr::mutate(TF_donor = ifelse(paste0(.$Subject, .$Donor) %in% paste0(febaligo_pp$Subject, febaligo_pp$Donor_Sample_ID), T, F), 
          Sample_type = ifelse(grepl("MPS_M", .$Subject), "Pre-FMT", "Post-FMT")) %>% 
-  mutate(subject_rep = gsub("MPS_","",gsub("MPP_","", Subject)))
+  dplyr::mutate(subject_rep = gsub("MPS_","",gsub("MPP_","", Subject)))
 summary(lm(Dissimilarity ~ TF_donor+Sample_type, data=df.long))
 
 ## APPETITE estimates & p-values
@@ -459,12 +462,12 @@ appetite_pp <- appetite %>% gather("Time", "Subject", 4:5)
 donors <- colnames(as.matrix(st_dis_appetite)) %in% appetite_met$Subject_ID[1:2]
 subjects <- !colnames(as.matrix(st_dis_appetite)) %in% appetite_met$Subject_ID[1:2]
 df.long <- st_dis_appetite %>% 
-  mutate(rownames = rownames(.))
+  dplyr::mutate(rownames = rownames(.))
 df.long <- reshape2::melt(df.long[subjects, donors]) %>%
   setNames(c("Subject","Donor", "Dissimilarity")) %>% 
-  mutate(TF_donor = ifelse(paste0(.$Subject, .$Donor) %in% paste0(appetite_pp$Subject, appetite_pp$Donor_Sample_ID), T, F),
+  dplyr::mutate(TF_donor = ifelse(paste0(.$Subject, .$Donor) %in% paste0(appetite_pp$Subject, appetite_pp$Donor_Sample_ID), T, F),
          Sample_type = ifelse(grepl("MPS_M", .$Subject), "Pre-FMT", "Post-FMT")) %>% 
-  mutate(subject_rep = gsub("MPS_","",gsub("MPP_","", Subject)))
+  dplyr::mutate(subject_rep = gsub("MPS_","",gsub("MPP_","", Subject)))
 summary(lm(Dissimilarity ~ TF_donor+Sample_type, data=df.long)) 
 
 ## FATMED estimates & p-values
@@ -480,17 +483,17 @@ fatmed_pp <- fatmed %>% gather("Time", "Subject", 4:5)
 donors <- colnames(as.matrix(st_dis_fat)) %in% fatmed_met$Subject_ID[1:2]
 subjects <- !colnames(as.matrix(st_dis_fat)) %in% fatmed_met$Subject_ID[1:2]
 df.long <- st_dis_fat %>% 
-  mutate(rownames = rownames(.))
+  dplyr::mutate(rownames = rownames(.))
 df.long <- reshape2::melt(df.long[subjects, donors]) %>%
   setNames(c("Subject","Donor", "Dissimilarity")) %>% 
-  mutate(TF_donor = ifelse(paste0(.$Subject, .$Donor) %in% paste0(fatmed_pp$Subject, fatmed_pp$Donor_Sample_ID), T, F),
+  dplyr::mutate(TF_donor = ifelse(paste0(.$Subject, .$Donor) %in% paste0(fatmed_pp$Subject, fatmed_pp$Donor_Sample_ID), T, F),
          Sample_type = ifelse(grepl("MPS_M", .$Subject), "Pre-FMT", "Post-FMT")) %>% 
-  mutate(subject_rep = gsub("MPS_","",gsub("MPP_","", Subject)))
+  dplyr::mutate(subject_rep = gsub("MPS_","",gsub("MPP_","", Subject)))
 summary(lm(Dissimilarity ~ TF_donor+Sample_type, data=df.long))
 
 
 
-#### Supplementary table 2
+#### Supplementary table 3
 met_delta <- (met_post %>% dplyr::select(-Study_origin) - met_pre %>% dplyr::select(-Study_origin)) %>% 
   .[order(as.numeric(gsub("M","", rownames(.)))),] %>% 
   dplyr::mutate(Donor_sharing_rate = df_fractionfig$Donor_sharing_rate[match(rownames(.), gsub("MPP_","", df_fractionfig$Post_FMT))])
@@ -513,5 +516,4 @@ for (i in 1:(ncol(met_delta)-1)){
 
 #of interest -> Diast & RD
 df <- df[order(as.numeric(df$p_value)),]
-rio::export(df,"Manuscript/Supplementary_information/Supplementary_table_S2.xlsx")
-
+rio::export(df,"Manuscript/Supplementary_information/Supplementary_table_S3.xlsx")
