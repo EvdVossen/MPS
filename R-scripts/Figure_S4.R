@@ -95,7 +95,7 @@ p <- ggplot(data=df,
   theme(panel.spacing.x = unit(6, "mm")) +
   scale_fill_gradient(low = "black", high = "red")
 
-ggsave(filename = "Figure_S4.pdf", 
+ggsave(filename = "Supplementary_Figure_S4.pdf", 
        plot = p, 
        device = "pdf", 
        path = "Manuscript/Supplementary_information/", 
